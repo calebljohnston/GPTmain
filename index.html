@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vita — Personal Health Coach</title>
+  <meta name="description" content="Your personal AI health coach and health record keeper. Private, browser-based.">
+  <meta name="theme-color" content="#2D7DD2">
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/chat.css">
+  <link rel="stylesheet" href="styles/sidebar.css">
+  <link rel="stylesheet" href="styles/panels.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── Header ──────────────────────────────────────────────────── -->
+    <header class="app-header">
+      <div class="header-logo">
+        <div class="logo-icon">💚</div>
+        <span>Vita</span>
+      </div>
+      <nav class="header-nav">
+        <button class="btn-nav" id="btn-show-record" title="Health Record">
+          📋 Record
+        </button>
+        <button class="btn-nav" id="btn-show-goals" title="Goals & Tasks">
+          🎯 Goals
+        </button>
+        <button class="btn-nav" id="btn-show-settings" title="Settings">
+          ⚙️ Settings
+        </button>
+      </nav>
+    </header>
+
+    <!-- ── App Body ────────────────────────────────────────────────── -->
+    <div class="app-body">
+
+      <!-- Left: Health Record Sidebar -->
+      <aside class="side-panel side-panel--open" id="health-sidebar-panel">
+        <div class="side-panel-inner" id="health-sidebar">
+          <!-- Rendered by ui.js renderHealthSidebar() -->
+          <div class="empty-state">Loading health record...</div>
+        </div>
+      </aside>
+
+      <!-- Center: Chat -->
+      <main class="chat-area">
+        <div id="chat-thread" role="log" aria-live="polite" aria-label="Conversation with Vita">
+          <!-- Messages rendered by chat.js -->
+        </div>
+
+        <div class="chat-input-area">
+          <form id="chat-form" autocomplete="off">
+            <div class="chat-input-wrapper">
+              <textarea
+                id="chat-input"
+                placeholder="Tell Vita something about your health..."
+                rows="1"
+                aria-label="Message Vita"
+                autofocus
+              ></textarea>
+              <button type="submit" id="btn-send" aria-label="Send message">
+                ➤
+              </button>
+            </div>
+          </form>
+          <p class="input-hint">Vita keeps your health data private — stored only in your browser</p>
+        </div>
+      </main>
+
+      <!-- Right: Goals Panel -->
+      <aside class="side-panel side-panel--right side-panel--open" id="goals-panel-wrapper">
+        <div class="side-panel-inner" id="goals-panel">
+          <!-- Rendered by ui.js renderGoalsPanel() -->
+          <div class="empty-state">Loading goals...</div>
+        </div>
+      </aside>
+
+      <!-- Settings Panel (hidden by default, shown on demand) -->
+      <aside class="side-panel side-panel--right" id="settings-panel-wrapper">
+        <div class="side-panel-inner" id="settings-panel">
+          <!-- Rendered by ui.js renderSettingsPanel() -->
+        </div>
+      </aside>
+
+    </div><!-- /.app-body -->
+
+    <!-- ── Mobile Bottom Nav ──────────────────────────────────────── -->
+    <nav class="mobile-bottom-nav" aria-label="Navigation">
+      <button class="nav-btn nav-btn--active" data-mobile-nav="mobile-chat">
+        <span class="nav-btn-icon">💬</span>
+        Chat
+      </button>
+      <button class="nav-btn" data-mobile-nav="mobile-record">
+        <span class="nav-btn-icon">📋</span>
+        Record
+      </button>
+      <button class="nav-btn" data-mobile-nav="mobile-goals">
+        <span class="nav-btn-icon">🎯</span>
+        Goals
+      </button>
+      <button class="nav-btn" data-mobile-nav="mobile-settings">
+        <span class="nav-btn-icon">⚙️</span>
+        Settings
+      </button>
+    </nav>
+
+  </div><!-- /#app -->
+
+  <!-- ── Onboarding Modal ───────────────────────────────────────────── -->
+  <div id="onboarding-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+    <div class="onboarding-card">
+
+      <!-- Step indicators -->
+      <div class="step-indicators" aria-hidden="true">
+        <div class="step-dot step-dot--active"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+      </div>
+
+      <!-- Step 1: Welcome -->
+      <div class="onboarding-step onboarding-step--active" data-step="1">
+        <div class="onboarding-logo">💚</div>
+        <h1 class="onboarding-title" id="onboarding-title">Welcome to Vita</h1>
+        <p class="onboarding-subtitle">
+          Your personal AI health coach and health record keeper.<br>
+          Track your health, set goals, and build better habits — all in one place.
+        </p>
+        <div class="privacy-badge">
+          🔒 <span><strong>Completely private.</strong> Your health data never leaves your browser. It's stored only in localStorage on this device.</span>
+        </div>
+        <div class="onboarding-actions">
+          <button class="btn-primary" id="btn-start">Get Started →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: API Key -->
+      <div class="onboarding-step" data-step="2">
+        <div class="onboarding-logo">🔑</div>
+        <h2 class="onboarding-title">Connect Anthropic API</h2>
+        <p class="onboarding-subtitle">
+          Vita uses Claude AI to understand your health needs. You'll need an Anthropic API key.
+        </p>
+        <div class="privacy-badge">
+          🔒 <span>Your API key is stored only in your browser. It's only sent directly to <strong>api.anthropic.com</strong> — nowhere else.</span>
+        </div>
+        <div class="form-group">
+          <div class="api-key-help">
+            <label for="onboarding-api-key">API Key</label>
+            <button class="btn-text" id="btn-get-api-key">Get API key ↗</button>
+          </div>
+          <input
+            type="password"
+            id="onboarding-api-key"
+            class="input-field"
+            placeholder="sk-ant-..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <p id="api-key-error" class="field-error hidden"></p>
+        </div>
+        <div class="onboarding-actions">
+          <button class="btn-primary" id="btn-verify-key">Verify & Continue →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Initial Profile -->
+      <div class="onboarding-step" data-step="3">
+        <div class="onboarding-logo">👤</div>
+        <h2 class="onboarding-title">Tell Vita about you</h2>
+        <p class="onboarding-subtitle">
+          This helps Vita personalize your experience. You can skip this and share details in chat anytime.
+        </p>
+        <div class="profile-fields">
+          <div class="form-group">
+            <label for="profile-name">Your name</label>
+            <input type="text" id="profile-name" class="input-field" placeholder="What should Vita call you?">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="profile-dob">Date of birth</label>
+              <input type="date" id="profile-dob" class="input-field">
+            </div>
+            <div class="form-group">
+              <label for="profile-sex">Biological sex</label>
+              <select id="profile-sex" class="input-field">
+                <option value="">Select...</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="intersex">Intersex</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="profile-units">Units</label>
+            <select id="profile-units" class="input-field">
+              <option value="metric">Metric (kg, cm)</option>
+              <option value="imperial">Imperial (lbs, ft)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="profile-height">Height</label>
+              <div class="input-with-unit">
+                <input type="number" id="profile-height" class="input-field" placeholder="Height">
+                <span class="unit-label" id="height-unit">cm</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="profile-weight">Weight</label>
+              <div class="input-with-unit">
+                <input type="number" id="profile-weight" class="input-field" placeholder="Weight">
+                <span class="unit-label" id="weight-unit">kg</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="onboarding-actions">
+          <button class="btn-primary" id="btn-save-profile">Start with Vita →</button>
+          <button class="btn-outline" id="btn-skip-profile">Skip for now</button>
+        </div>
+      </div>
+
+    </div><!-- /.onboarding-card -->
+  </div><!-- /#onboarding-modal -->
+
+  <!-- Toast container injected by ui.js -->
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
