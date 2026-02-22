@@ -24,8 +24,9 @@ for (const key of REQUIRED_ENV) {
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const db = require('./lib/db');
-const { runClaudeTurn, resumeAfterConfirmation } = require('./lib/anthropic');
+const { runClaudeTurn, runClaudeMediaTurn, resumeAfterConfirmation } = require('./lib/anthropic');
 const { setBot, sendMessage } = require('./lib/telegram');
+const { prepareMediaForAnalysis } = require('./lib/media');
 const { initReminders } = require('./lib/reminders');
 
 // ── Startup: reset any sessions stuck in PROCESSING from a previous crash ─────
@@ -43,13 +44,22 @@ console.log('[bot] Telegram bot started (polling mode)');
 const PROCESSING_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 
 bot.on('message', async (msg) => {
-  // Only handle text messages
-  if (!msg.text) return;
+  const isText     = Boolean(msg.text);
+  const isPhoto    = Boolean(msg.photo);
+  const isDocument = Boolean(msg.document);
+
+  // Ignore stickers, voice messages, etc.
+  if (!isText && !isPhoto && !isDocument) return;
 
   const chatId = String(msg.chat.id);
-  const text = msg.text.trim();
+  const text   = msg.text ? msg.text.trim() : null;
 
-  console.log(`[bot] Message from ${chatId}: "${text.slice(0, 80)}"`);
+  console.log(
+    `[bot] Message from ${chatId}: ` +
+    (isPhoto    ? '[photo]' :
+     isDocument ? `[document: ${msg.document?.mime_type || 'unknown'}]` :
+     `"${text.slice(0, 80)}"`)
+  );
 
   let state = db.getSessionState(chatId);
 
@@ -64,12 +74,21 @@ bot.on('message', async (msg) => {
   }
 
   if (state === 'AWAITING_CONFIRMATION') {
-    await handleConfirmationReply(chatId, text);
+    if (isText) {
+      await handleConfirmationReply(chatId, text);
+    } else {
+      // Photo/document received while waiting for YES/NO — ask user to answer first
+      await sendMessage(chatId, 'Please reply YES or NO to the pending question first, then send your photo or document.');
+    }
   } else if (state === 'PROCESSING') {
     // Still within the timeout window — genuinely processing
     console.warn(`[bot] Message from ${chatId} while PROCESSING — ignoring`);
   } else {
-    await handleInboundMessage(chatId, text);
+    if (isPhoto || isDocument) {
+      await handleInboundMedia(chatId, msg);
+    } else {
+      await handleInboundMessage(chatId, text);
+    }
   }
 });
 
@@ -119,6 +138,45 @@ async function handleInboundMessage(chatId, text) {
     db.setSessionState(chatId, 'IDLE');
     try {
       await sendMessage(chatId, 'Sorry, something went wrong. Please try again in a moment.');
+    } catch (sendErr) {
+      console.error(`[bot] Also failed to send error message to ${chatId}:`, sendErr.message);
+    }
+  }
+}
+
+// ── Handle photo / document messages ─────────────────────────────────────────
+
+async function handleInboundMedia(chatId, msg) {
+  db.setSessionState(chatId, 'PROCESSING');
+  const typingInterval = startTyping(chatId);
+
+  try {
+    const mediaPayload = await prepareMediaForAnalysis(bot, msg);
+    const caption = msg.caption ? msg.caption.trim() : null;
+    const result  = await runClaudeMediaTurn(chatId, mediaPayload, caption, db);
+    clearInterval(typingInterval);
+
+    if (result.type === 'text') {
+      await sendMessage(chatId, result.text);
+      db.setSessionState(chatId, 'IDLE');
+
+    } else if (result.type === 'awaiting_confirmation') {
+      const prefix = result.prefix ? `${result.prefix}\n` : '';
+      const confirmMsg =
+        `${prefix}` +
+        `Vita wants to: ${result.summary}\n\n` +
+        `Reply YES to confirm or NO to skip.`;
+      await sendMessage(chatId, confirmMsg);
+      db.setSessionState(chatId, 'AWAITING_CONFIRMATION');
+    }
+
+  } catch (err) {
+    clearInterval(typingInterval);
+    console.error(`[bot] Media error for ${chatId}:`, err.userMessage ? err.userMessage : err);
+    db.setSessionState(chatId, 'IDLE');
+    const userMsg = err.userMessage || 'Sorry, I had trouble processing that file. Please try again in a moment.';
+    try {
+      await sendMessage(chatId, userMsg);
     } catch (sendErr) {
       console.error(`[bot] Also failed to send error message to ${chatId}:`, sendErr.message);
     }

@@ -229,6 +229,115 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'process_health_document',
+    description:
+      'Extract structured health data from a photo or document the user has shared. ' +
+      'Skin photos: describe what you observe — do NOT diagnose. ' +
+      'Medication bottles: read drug name, dosage, frequency, refills, prescriber from the label. ' +
+      'Lab reports: capture every test result with value, unit, reference range, and flag. ' +
+      'AVS documents: capture all listed diagnoses, medication changes, vitals, follow-up instructions. ' +
+      'Always call this tool, even if only partial data is visible. Requires confirmation before saving.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        document_type: {
+          type: 'string',
+          enum: ['skin_photo', 'medication_bottle', 'lab_report', 'avs', 'prescription',
+                 'other_medical_image', 'other_document'],
+          description: 'What kind of image or document was shared',
+        },
+        extracted_data: {
+          type: 'object',
+          description: 'Structured health data extracted from the document. Only include clearly readable values.',
+          properties: {
+            medications: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name:       { type: 'string' },
+                  dosage:     { type: 'string' },
+                  frequency:  { type: 'string' },
+                  prescriber: { type: 'string' },
+                },
+                required: ['name'],
+              },
+            },
+            conditions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name:       { type: 'string' },
+                  icd_code:   { type: 'string' },
+                  noted_date: { type: 'string' },
+                },
+                required: ['name'],
+              },
+            },
+            allergies: {
+              type: 'array',
+              items: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+            },
+            lab_results: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  test_name:       { type: 'string' },
+                  value:           { type: 'string' },
+                  unit:            { type: 'string' },
+                  reference_range: { type: 'string' },
+                  flag:            { type: 'string', enum: ['normal', 'high', 'low', 'critical', 'unknown'] },
+                  collected_at:    { type: 'string', description: 'Date from the document (YYYY-MM-DD or as printed)' },
+                },
+                required: ['test_name', 'value'],
+              },
+            },
+            follow_up_instructions: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Follow-up instructions from AVS or clinical notes',
+            },
+            next_appointment: {
+              type: 'object',
+              properties: {
+                date:     { type: 'string' },
+                provider: { type: 'string' },
+                reason:   { type: 'string' },
+              },
+            },
+            observations: {
+              type: 'string',
+              description: 'For skin/wound photos: plain visual description (color, texture, location). No diagnosis.',
+            },
+          },
+        },
+        summary_for_user: {
+          type: 'string',
+          description:
+            'Plain-language summary shown to the user before they confirm. ' +
+            'Must be factual, not diagnostic. ' +
+            'E.g. "Lab report shows HbA1c 6.2% (Jan 15)" not "your HbA1c suggests pre-diabetes."',
+        },
+        confidence: {
+          type: 'string',
+          enum: ['high', 'medium', 'low'],
+          description: 'How clearly readable the document was',
+        },
+        could_not_extract: {
+          type: 'string',
+          description: 'Anything that was blurry, cut off, or could not be reliably read',
+        },
+        human_readable_summary: {
+          type: 'string',
+          description: 'Same as summary_for_user — used by the confirmation system',
+        },
+      },
+      required: ['document_type', 'extracted_data', 'summary_for_user', 'human_readable_summary'],
+    },
+  },
+  {
     name: 'get_health_summary',
     description:
       'Retrieve a computed summary of health trends, goal progress, or streak data. Use when the user asks about their progress or trends.',
@@ -260,6 +369,7 @@ const REQUIRES_CONFIRMATION = {
   mark_task_complete: false,
   get_health_summary: false,
   adjust_reminder: true,
+  process_health_document: true,
 };
 
 function requiresConfirmation(toolName) {
@@ -339,7 +449,17 @@ You are responding via Telegram chat on the user's phone, not a browser.
 - Use short paragraphs separated by blank lines
 - When you want to confirm an action, just call the tool — the system will send the user a YES/NO confirmation prompt automatically
 - Do not ask "should I record that?" in plain text — just call the tool
-- One topic per message; do not address multiple things at once`;
+- One topic per message; do not address multiple things at once
+
+## Image and Document Processing
+When the user sends a photo or document, always call process_health_document — even with partial data.
+- Skin photos: describe what is visually observable (color, texture, location). Never say "this looks like [condition]." — only "I can see..." or "the image shows..."
+- Medication bottles: read drug name, dosage, frequency, refills, and prescriber from the label exactly as printed.
+- Lab reports: extract every listed test result with its value, unit, reference range, and flag.
+- AVS documents: extract all listed diagnoses, medication changes, vitals, and follow-up instructions.
+- Note anything unclear or cut off in could_not_extract.
+- summary_for_user must be factual, never diagnostic: "Lab report lists HbA1c 6.2%" not "your HbA1c suggests pre-diabetes."
+- Do NOT make medical diagnoses or definitive clinical interpretations — describe only what is printed or visually present.`;
 }
 
 function buildHealthSnapshot(record) {
@@ -619,6 +739,51 @@ function executeMarkTaskComplete(input, phone, db) {
   return db.markTaskComplete(phone, input.task_id, input.completed_date);
 }
 
+function executeProcessHealthDocument(input, phone, db) {
+  const { document_type, extracted_data, confidence, could_not_extract, summary_for_user } = input;
+
+  const extractionId = db.generateId('doc');
+  const src = { source: 'ai_extracted', extractionId };
+
+  // Save audit record — no image bytes, just structured results
+  db.saveDocumentExtraction(phone, {
+    id: extractionId,
+    documentType: document_type,
+    extractedAt: new Date().toISOString(),
+    confidence: confidence || 'medium',
+    couldNotExtract: could_not_extract || null,
+    summaryForUser: summary_for_user,
+    data: extracted_data,
+  });
+
+  // Promote extracted data into health record using existing helpers.
+  // Each item is tagged with source: 'ai_extracted' so it's distinguishable from
+  // manually-entered data. This runs only after user says YES (confirm-required tool).
+
+  for (const med of extracted_data.medications || []) {
+    db.upsertListItem(phone, 'medications', { ...med, active: true, ...src });
+  }
+  for (const cond of extracted_data.conditions || []) {
+    db.upsertListItem(phone, 'conditions', { ...cond, status: 'active', ...src });
+  }
+  for (const allergy of extracted_data.allergies || []) {
+    db.upsertListItem(phone, 'allergies', { ...allergy, ...src });
+  }
+  for (const lab of extracted_data.lab_results || []) {
+    db.appendVital(phone, 'labResults', {
+      testName: lab.test_name,
+      value: lab.value,
+      unit: lab.unit || null,
+      referenceRange: lab.reference_range || null,
+      flag: lab.flag || 'unknown',
+      recordedAt: lab.collected_at || new Date().toISOString(),
+      ...src,
+    });
+  }
+
+  return { success: true, extractionId };
+}
+
 function computeGoalProgress(goal, phone, db) {
   if (!goal.targetValue) return null;
 
@@ -748,6 +913,8 @@ function executeTool(toolName, input, phone, db) {
       return executeGetHealthSummary(input, phone, db);
     case 'adjust_reminder':
       return executeAdjustReminder(input, phone, db);
+    case 'process_health_document':
+      return executeProcessHealthDocument(input, phone, db);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }

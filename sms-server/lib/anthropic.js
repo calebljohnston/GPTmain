@@ -8,7 +8,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { buildSystemPrompt, TOOL_DEFINITIONS, requiresConfirmation, executeTool } = require('./vita-core');
 
 const MODEL = 'claude-haiku-4-5';
-const MAX_TOKENS = 1024;
+const MAX_TOKENS       = 1024;
+const MAX_TOKENS_MEDIA = 2048; // extra headroom for image/document analysis
 
 // Lazy-initialized client
 let _client = null;
@@ -124,6 +125,122 @@ async function runClaudeTurn(phone, userText, db) {
   }
 
   // 9. All tools were auto-executed — persist tool_result message and continue
+  db.appendMessage(phone, { role: 'user', content: resolvedResults });
+  return followUpTurn(phone, db);
+}
+
+/**
+ * Run a Claude turn that includes an image or PDF attachment.
+ * The media block lives in memory only — conversation history stores a text placeholder.
+ *
+ * @param {string} phone
+ * @param {{ base64: string, mimeType: string, isDocument: boolean, fileName: string|null }} mediaPayload
+ * @param {string|null} caption   — optional user-supplied caption
+ * @param {object} db
+ * @returns {Promise<{ type: 'text'|'awaiting_confirmation', ... }>}
+ */
+async function runClaudeMediaTurn(phone, mediaPayload, caption, db) {
+  const { base64, mimeType, isDocument, fileName } = mediaPayload;
+
+  // 1. Build in-memory media block (never written to disk)
+  const mediaBlock = isDocument
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+    : { type: 'image',    source: { type: 'base64', media_type: mimeType, data: base64 } };
+
+  const fileLabel = fileName || mimeType;
+  const mediaKind = isDocument ? 'document' : 'photo';
+
+  const textPart = caption
+    ? `The user sent a ${mediaKind} with caption: "${caption}". Please analyze it for health-relevant information and call process_health_document with whatever you can extract.`
+    : `The user sent a ${mediaKind}. Please analyze it for health-relevant information and call process_health_document with whatever you can extract.`;
+
+  // 2. Persist text placeholder to conversation history (no base64)
+  const placeholder = caption
+    ? `[User sent ${mediaKind}: ${fileLabel}] Caption: "${caption}"`
+    : `[User sent ${mediaKind}: ${fileLabel}]`;
+  db.appendMessage(phone, { role: 'user', content: placeholder });
+
+  // 3. Build API messages: full history (with placeholder) → drop placeholder → insert real media block
+  const historyMessages = db.getApiMessages(phone);
+  const apiMessages = [
+    ...historyMessages.slice(0, -1),  // drop the just-appended placeholder from the end
+    { role: 'user', content: [mediaBlock, { type: 'text', text: textPart }] },
+  ];
+
+  // 4. Call Claude with higher token limit; PDFs require the beta header
+  const requestOptions = {
+    model: MODEL,
+    max_tokens: MAX_TOKENS_MEDIA,
+    system: buildSystemPrompt(phone, db),
+    tools: TOOL_DEFINITIONS,
+    messages: apiMessages,
+  };
+  if (isDocument) requestOptions.betas = ['pdfs-2024-09-25'];
+
+  const response = await getClient().messages.create(requestOptions);
+
+  // 5–9. Identical to runClaudeTurn from here
+  const textBlocks = response.content.filter((b) => b.type === 'text');
+  const toolCalls  = response.content.filter((b) => b.type === 'tool_use');
+  const assistantText = textBlocks.map((b) => b.text).join('\n').trim();
+
+  const toolBlocks = toolCalls.length > 0
+    ? response.content.map((b) => {
+        if (b.type === 'tool_use') return { type: 'tool_use', id: b.id, name: b.name, input: b.input };
+        return { type: 'text', text: b.text || '' };
+      })
+    : null;
+
+  db.appendMessage(phone, { role: 'assistant', content: assistantText, toolBlocks });
+
+  if (toolCalls.length === 0) {
+    return { type: 'text', text: stripMarkdown(assistantText) };
+  }
+
+  const resolvedResults = [];
+  const confirmTools   = [];
+
+  for (const tc of toolCalls) {
+    if (!requiresConfirmation(tc.name)) {
+      try {
+        const data = executeTool(tc.name, tc.input, phone, db);
+        resolvedResults.push({
+          type: 'tool_result', tool_use_id: tc.id,
+          content: JSON.stringify(data ?? { success: true }),
+        });
+      } catch (e) {
+        resolvedResults.push({
+          type: 'tool_result', tool_use_id: tc.id,
+          content: JSON.stringify({ error: e.message }), is_error: true,
+        });
+      }
+    } else {
+      confirmTools.push(tc);
+    }
+  }
+
+  if (confirmTools.length > 0) {
+    const firstConfirm = confirmTools[0];
+    db.savePendingConfirmation(phone, {
+      toolUseId: firstConfirm.id,
+      toolName:  firstConfirm.name,
+      toolInput: firstConfirm.input,
+      summary:   firstConfirm.input?.human_readable_summary || 'Save extracted health data',
+      allToolCalls: toolCalls.map((tc) => ({
+        id: tc.id, name: tc.name, input: tc.input,
+        autoResolved: !requiresConfirmation(tc.name),
+        resolvedResult: resolvedResults.find((r) => r.tool_use_id === tc.id) || null,
+      })),
+    });
+
+    const prefix = assistantText ? `${stripMarkdown(assistantText)}\n\n` : '';
+    return {
+      type: 'awaiting_confirmation',
+      summary: firstConfirm.input?.human_readable_summary || 'Save extracted health data',
+      prefix,
+    };
+  }
+
   db.appendMessage(phone, { role: 'user', content: resolvedResults });
   return followUpTurn(phone, db);
 }
@@ -311,4 +428,4 @@ function stripMarkdown(text) {
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 
-module.exports = { runClaudeTurn, resumeAfterConfirmation };
+module.exports = { runClaudeTurn, runClaudeMediaTurn, resumeAfterConfirmation };

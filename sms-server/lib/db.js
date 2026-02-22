@@ -554,6 +554,26 @@ function getMinCadenceOverdueTasks(phone) {
   return overdue;
 }
 
+// ── Document Extractions ──────────────────────────────────────────────────────
+
+// Append an AI extraction audit record.
+// Stores metadata + extracted data — never the raw image bytes.
+function saveDocumentExtraction(phone, extraction) {
+  const store = readFile('document_extractions');
+  if (!store[phone]) store[phone] = [];
+  store[phone].push(extraction);
+  // Cap at 200 per user (well beyond practical use)
+  if (store[phone].length > 200) store[phone] = store[phone].slice(-200);
+  writeFile('document_extractions', store);
+  return extraction;
+}
+
+// Return all extraction audit records for a user, newest-last.
+function getDocumentExtractions(phone) {
+  const store = readFile('document_extractions');
+  return store[phone] || [];
+}
+
 // Get all phone numbers that have reminders (used by reminders.js for nudge pass)
 function getAllPhonesWithReminders() {
   const store = readFile('reminders');
@@ -647,6 +667,9 @@ module.exports = {
   getEngagementSummary,
   getMinCadenceOverdueTasks,
   getAllPhonesWithReminders,
+  // Document extractions
+  saveDocumentExtraction,
+  getDocumentExtractions,
   // Sessions
   getSessionState,
   setSessionState,
