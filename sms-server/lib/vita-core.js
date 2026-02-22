@@ -84,9 +84,35 @@ const TOOL_DEFINITIONS = [
       properties: {
         title: { type: 'string' },
         goal_id: { type: 'string', description: 'ID of the parent goal, or omit if standalone' },
+        type: {
+          type: 'string',
+          enum: ['habit', 'check', 'medication', 'measurement', 'appointment', 'custom'],
+          description: 'Classification of the task type',
+        },
         recurrence: {
           type: 'string',
           enum: ['daily', 'weekdays', 'weekends', 'weekly', 'once'],
+          description: 'Simple recurrence — prefer cadence for custom schedules',
+        },
+        cadence: {
+          type: 'object',
+          description: 'Rich scheduling cadence. Use instead of recurrence for custom days or intervals.',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['daily', 'weekdays', 'weekends', 'custom_days', 'every_n_days', 'weekly', 'once'],
+            },
+            days: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Required for custom_days: e.g. ["Mon", "Wed", "Fri"]',
+            },
+            intervalDays: {
+              type: 'integer',
+              description: 'Required for every_n_days: fires every N days from creation date',
+            },
+          },
+          required: ['type'],
         },
         due_time: {
           type: 'string',
@@ -96,9 +122,17 @@ const TOOL_DEFINITIONS = [
           type: 'boolean',
           description: 'Whether to schedule a Telegram reminder message',
         },
+        expires_at: {
+          type: 'string',
+          description: 'ISO date (YYYY-MM-DD) after which the reminder deactivates. Omit for indefinite.',
+        },
+        minimum_cadence_days: {
+          type: 'integer',
+          description: 'Vita nudges the user if this many days pass without completing the task (e.g. 30 for monthly checks).',
+        },
         human_readable_summary: { type: 'string' },
       },
-      required: ['title', 'recurrence', 'human_readable_summary'],
+      required: ['title', 'human_readable_summary'],
     },
   },
   {
@@ -167,6 +201,34 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'adjust_reminder',
+    description:
+      'Modify an existing reminder or task schedule. Use when user asks to snooze, skip today, pause, resume, or change the time/frequency of a reminder. Requires confirmation.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string', description: 'ID of the task whose reminder to adjust' },
+        action: {
+          type: 'string',
+          enum: ['snooze', 'skip_today', 'change_time', 'pause', 'resume', 'change_frequency'],
+        },
+        new_time: { type: 'string', description: 'New HH:MM for change_time action' },
+        new_cadence: {
+          type: 'object',
+          description: 'New cadence object for change_frequency action',
+          properties: {
+            type: { type: 'string' },
+            days: { type: 'array', items: { type: 'string' } },
+            intervalDays: { type: 'integer' },
+          },
+        },
+        snooze_hours: { type: 'number', description: 'Hours to snooze (default 2) for snooze action' },
+        human_readable_summary: { type: 'string' },
+      },
+      required: ['task_id', 'action', 'human_readable_summary'],
+    },
+  },
+  {
     name: 'get_health_summary',
     description:
       'Retrieve a computed summary of health trends, goal progress, or streak data. Use when the user asks about their progress or trends.',
@@ -197,6 +259,7 @@ const REQUIRES_CONFIRMATION = {
   update_preferences: true,
   mark_task_complete: false,
   get_health_summary: false,
+  adjust_reminder: true,
 };
 
 function requiresConfirmation(toolName) {
@@ -217,6 +280,14 @@ function buildSystemPrompt(phone, db) {
   const activeTasks = goalsData.tasks.filter((t) => t.active);
   const prefs = record.preferences;
   const name = record.demographics?.name || 'there';
+
+  // Build engagement map (completion rates, consecutive missed, etc.)
+  const engagementList = db.getEngagementSummary ? db.getEngagementSummary(phone) : [];
+  const engMap = {};
+  for (const e of engagementList) engMap[e.taskId] = e;
+  const taskSummaries = activeTasks.length > 0
+    ? JSON.stringify(activeTasks.map((t) => summarizeTask(t, engMap[t.id])), null, 2)
+    : 'No active tasks yet.';
 
   return `You are Vita, a personal health coach and health record keeper. You are warm, encouraging, clinically precise, and evidence-based. You speak in a ${prefs.communicationStyle || 'direct'} and empathetic tone, like a trusted friend who happens to have medical knowledge.
 
@@ -245,7 +316,7 @@ ${JSON.stringify(snapshot, null, 2)}
 ${activeGoals.length > 0 ? JSON.stringify(activeGoals.map(summarizeGoal), null, 2) : 'No active goals yet.'}
 
 ## Active Tasks (${activeTasks.length})
-${activeTasks.length > 0 ? JSON.stringify(activeTasks.map((t) => summarizeTask(t)), null, 2) : 'No active tasks yet.'}
+${taskSummaries}
 
 ## User Preferences
 - Communication style: ${prefs.communicationStyle || 'encouraging'}
@@ -302,18 +373,26 @@ function summarizeGoal(goal) {
   };
 }
 
-function summarizeTask(task) {
+function summarizeTask(task, engagement) {
   const today = new Date().toISOString().split('T')[0];
   const completedToday = task.completedDates?.includes(today);
-  return {
+  const summary = {
     id: task.id,
     title: task.title,
     goalId: task.goalId,
-    recurrence: task.recurrence,
+    cadence: task.cadence || { type: task.recurrence || 'daily' },
     dueTime: task.dueTime,
     completedToday,
     currentStreak: calculateStreak(task.completedDates || []),
   };
+  if (engagement) {
+    if (engagement.completionRate7d !== null) summary.completionRate7d = `${engagement.completionRate7d}%`;
+    if (engagement.consecutiveMissed > 0) summary.consecutiveMissed = engagement.consecutiveMissed;
+    if (engagement.suppressed) summary.suppressedUntilToday = true;
+    if (task.minimumCadenceDays) summary.minimumCadenceDays = task.minimumCadenceDays;
+    if (task.expiresAt) summary.expiresAt = task.expiresAt;
+  }
+  return summary;
 }
 
 // ── Streak Calculation ────────────────────────────────────────────────────────
@@ -397,13 +476,18 @@ function executeAddGoal(input, phone, db) {
 }
 
 function executeAddTask(input, phone, db) {
+  const cadence = input.cadence || (input.recurrence ? { type: input.recurrence } : { type: 'daily' });
   const task = {
     id: db.generateId('task'),
     title: input.title,
     goalId: input.goal_id || null,
-    recurrence: input.recurrence,
+    type: input.type || 'habit',
+    recurrence: cadence.type,  // keep legacy field in sync
+    cadence,
     dueTime: input.due_time || null,
     scheduleReminder: input.schedule_reminder !== false,
+    expiresAt: input.expires_at || null,
+    minimumCadenceDays: input.minimum_cadence_days || null,
     completedDates: [],
     active: true,
     createdAt: new Date().toISOString(),
@@ -417,10 +501,94 @@ function executeAddTask(input, phone, db) {
       title: saved.title,
       scheduledTime: saved.dueTime,
       recurrence: saved.recurrence,
+      cadence: saved.cadence,
     });
   }
 
   return saved;
+}
+
+function executeAdjustReminder(input, phone, db) {
+  const { task_id, action, new_time, new_cadence, snooze_hours } = input;
+  const reminders = db.getRemindersByTaskId(phone, task_id);
+  const reminder = reminders[0] || null;
+  const goalsData = db.getGoals(phone);
+  const task = goalsData.tasks.find((t) => t.id === task_id) || null;
+
+  switch (action) {
+    case 'snooze': {
+      if (!reminder) return { error: 'No reminder found for this task' };
+      const hours = snooze_hours || 2;
+      const until = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+      db.suppressReminder(reminder.id, until);
+      return { success: true, action: 'snoozed', snooze_until: until };
+    }
+
+    case 'skip_today': {
+      if (!reminder) return { error: 'No reminder found for this task' };
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+      db.suppressReminder(reminder.id, endOfDay.toISOString());
+      return { success: true, action: 'skipped_today' };
+    }
+
+    case 'change_time': {
+      if (!reminder || !new_time) return { error: 'Missing reminder or new_time' };
+      db.updateReminder(phone, reminder.id, { scheduled_time: new_time });
+      return { success: true, action: 'changed_time', new_time };
+    }
+
+    case 'pause': {
+      if (reminder) db.updateReminder(phone, reminder.id, { active: 0 });
+      if (task) {
+        const data = db.getGoals(phone);
+        const t = data.tasks.find((x) => x.id === task_id);
+        if (t) { t.active = false; db.saveGoals(phone, data); }
+      }
+      return { success: true, action: 'paused' };
+    }
+
+    case 'resume': {
+      if (reminder) db.updateReminder(phone, reminder.id, { active: 1, suppressed_until: null });
+      if (task) {
+        const data = db.getGoals(phone);
+        const t = data.tasks.find((x) => x.id === task_id);
+        if (t) { t.active = true; db.saveGoals(phone, data); }
+      }
+      return { success: true, action: 'resumed' };
+    }
+
+    case 'change_frequency': {
+      if (!new_cadence) return { error: 'Missing new_cadence' };
+      // Update task cadence
+      const data = db.getGoals(phone);
+      const t = data.tasks.find((x) => x.id === task_id);
+      if (t) {
+        t.cadence = new_cadence;
+        t.recurrence = new_cadence.type;
+        db.saveGoals(phone, data);
+      }
+      // Update reminder days to match new cadence
+      if (reminder) {
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayMap = {
+          daily: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          weekdays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          weekends: ['Sat', 'Sun'],
+          weekly: [dayNames[new Date().getDay()]],
+          custom_days: new_cadence.days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          every_n_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          once: [dayNames[new Date().getDay()]],
+        };
+        const days = dayMap[new_cadence.type] || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        db.updateReminder(phone, reminder.id, { days: JSON.stringify(days) });
+      }
+      return { success: true, action: 'changed_frequency', new_cadence };
+    }
+
+    default:
+      return { error: `Unknown action: ${action}` };
+  }
 }
 
 function executeUpdateGoalStatus(input, phone, db) {
@@ -578,6 +746,8 @@ function executeTool(toolName, input, phone, db) {
       return executeMarkTaskComplete(input, phone, db);
     case 'get_health_summary':
       return executeGetHealthSummary(input, phone, db);
+    case 'adjust_reminder':
+      return executeAdjustReminder(input, phone, db);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }

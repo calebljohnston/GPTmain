@@ -320,15 +320,18 @@ function addReminder(phone, reminder) {
     task_id: reminder.taskId || reminder.task_id || '',
     title: reminder.title,
     scheduled_time: reminder.scheduledTime || reminder.dueTime || '08:00',
-    days: JSON.stringify(reminder.days || getDaysForRecurrence(reminder.recurrence)),
+    days: JSON.stringify(reminder.days || getDaysForCadence(reminder.cadence, reminder.recurrence)),
     active: 1,
     last_fired_date: null,
+    consecutive_missed: 0,
+    suppressed_until: null,
+    created_at: new Date().toISOString().split('T')[0],
   };
 
   // Replace if same task already has a reminder
   const idx = store[phone].findIndex((r) => r.task_id === entry.task_id);
   if (idx >= 0) {
-    store[phone][idx] = entry;
+    store[phone][idx] = { ...store[phone][idx], ...entry };
   } else {
     store[phone].push(entry);
   }
@@ -337,29 +340,78 @@ function addReminder(phone, reminder) {
   return entry;
 }
 
-function getDaysForRecurrence(recurrence) {
-  switch (recurrence) {
+// Compute which days a reminder should fire based on the cadence object or legacy recurrence string
+function getDaysForCadence(cadence, legacyRecurrence) {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  if (cadence) {
+    switch (cadence.type) {
+      case 'daily': return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      case 'weekdays': return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+      case 'weekends': return ['Sat', 'Sun'];
+      case 'weekly': return [dayNames[new Date().getDay()]];
+      case 'custom_days': return cadence.days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      case 'every_n_days': return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; // interval checked separately
+      case 'once': return [dayNames[new Date().getDay()]];
+      default: return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    }
+  }
+
+  // Legacy recurrence string fallback
+  switch (legacyRecurrence) {
     case 'daily': return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     case 'weekdays': return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
     case 'weekends': return ['Sat', 'Sun'];
-    case 'weekly': {
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      return [dayNames[new Date().getDay()]];
-    }
+    case 'weekly': return [dayNames[new Date().getDay()]];
     default: return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   }
 }
 
+// Returns all active reminders due at timeStr on today that pass smart filters:
+// - not suppressed
+// - not already fired today
+// - not expired (task expiresAt)
+// - task not already completed today (suppress redundant reminder)
 function getDueReminders(timeStr, today) {
   const store = readFile('reminders');
+  const now = new Date();
   const due = [];
+
   for (const phone of Object.keys(store)) {
+    // Load this user's tasks to check completion and expiry
+    const goalsData = getGoals(phone);
+    const taskMap = {};
+    for (const t of goalsData.tasks) taskMap[t.id] = t;
+
     for (const r of store[phone]) {
-      if (r.active && r.scheduled_time === timeStr && r.last_fired_date !== today) {
-        due.push(r);
+      if (!r.active) continue;
+      if (r.scheduled_time !== timeStr) continue;
+      if (r.last_fired_date === today) continue;
+
+      // Suppression window check
+      if (r.suppressed_until && new Date(r.suppressed_until) > now) continue;
+
+      const task = taskMap[r.task_id];
+      if (task) {
+        // Skip if task has expired
+        if (task.expiresAt && new Date(task.expiresAt) < now) continue;
+
+        // Skip if user already completed this task today
+        if (task.completedDates && task.completedDates.includes(today)) continue;
+
+        // For every_n_days cadence: check interval from createdAt
+        if (task.cadence && task.cadence.type === 'every_n_days') {
+          const intervalDays = task.cadence.intervalDays || 1;
+          const created = new Date(task.createdAt);
+          const daysSinceCreation = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+          if (daysSinceCreation % intervalDays !== 0) continue;
+        }
       }
+
+      due.push({ ...r, _task: task || null });
     }
   }
+
   return due;
 }
 
@@ -373,6 +425,139 @@ function markReminderFired(reminderId, today) {
       return;
     }
   }
+}
+
+// Suppress a reminder until a given ISO timestamp (for snooze)
+function suppressReminder(reminderId, until) {
+  const store = readFile('reminders');
+  for (const phone of Object.keys(store)) {
+    const r = store[phone].find((x) => x.id === reminderId);
+    if (r) {
+      r.suppressed_until = until;
+      writeFile('reminders', store);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Find reminder(s) by task_id for a given phone
+function getRemindersByTaskId(phone, taskId) {
+  const store = readFile('reminders');
+  return (store[phone] || []).filter((r) => r.task_id === taskId);
+}
+
+// Update reminder fields directly (used by adjust_reminder tool executor)
+function updateReminder(phone, reminderId, updates) {
+  const store = readFile('reminders');
+  if (!store[phone]) return null;
+  const idx = store[phone].findIndex((r) => r.id === reminderId);
+  if (idx < 0) return null;
+  store[phone][idx] = { ...store[phone][idx], ...updates };
+  writeFile('reminders', store);
+  return store[phone][idx];
+}
+
+// Increment consecutive_missed for a reminder (called at midnight for unresponded reminders)
+function incrementConsecutiveMissed(reminderId) {
+  const store = readFile('reminders');
+  for (const phone of Object.keys(store)) {
+    const r = store[phone].find((x) => x.id === reminderId);
+    if (r) {
+      r.consecutive_missed = (r.consecutive_missed || 0) + 1;
+      writeFile('reminders', store);
+      return r.consecutive_missed;
+    }
+  }
+  return 0;
+}
+
+// Reset consecutive_missed when user completes a task (called from markTaskComplete)
+function resetConsecutiveMissed(phone, taskId) {
+  const store = readFile('reminders');
+  if (!store[phone]) return;
+  let changed = false;
+  for (const r of store[phone]) {
+    if (r.task_id === taskId && r.consecutive_missed > 0) {
+      r.consecutive_missed = 0;
+      changed = true;
+    }
+  }
+  if (changed) writeFile('reminders', store);
+}
+
+// Compute 7-day completion rate for a task (0.0–1.0)
+// Counts how many of the last N days had a completion
+function getTaskCompletionRate(phone, taskId, days = 7) {
+  const goalsData = getGoals(phone);
+  const task = goalsData.tasks.find((t) => t.id === taskId);
+  if (!task || !task.completedDates) return null;
+
+  const completed = new Set(task.completedDates);
+  let hits = 0;
+  for (let i = 0; i < days; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    if (completed.has(d.toISOString().split('T')[0])) hits++;
+  }
+  return hits / days;
+}
+
+// Build an engagement summary for all active tasks for a user.
+// Used by buildSystemPrompt() to give Claude fatigue/progress context.
+function getEngagementSummary(phone) {
+  const goalsData = getGoals(phone);
+  const reminderStore = readFile('reminders');
+  const userReminders = reminderStore[phone] || [];
+  const reminderMap = {};
+  for (const r of userReminders) reminderMap[r.task_id] = r;
+
+  return goalsData.tasks
+    .filter((t) => t.active)
+    .map((t) => {
+      const rate7d = getTaskCompletionRate(phone, t.id, 7);
+      const reminder = reminderMap[t.id];
+      return {
+        taskId: t.id,
+        title: t.title,
+        completionRate7d: rate7d !== null ? Math.round(rate7d * 100) : null,
+        consecutiveMissed: reminder ? (reminder.consecutive_missed || 0) : 0,
+        suppressed: reminder && reminder.suppressed_until && new Date(reminder.suppressed_until) > new Date(),
+        expiresAt: t.expiresAt || null,
+        minimumCadenceDays: t.minimumCadenceDays || null,
+        lastCompleted: t.completedDates?.slice(-1)[0] || null,
+      };
+    });
+}
+
+// Get all tasks with minimumCadenceDays that are overdue for a nudge
+function getMinCadenceOverdueTasks(phone) {
+  const goalsData = getGoals(phone);
+  const today = new Date();
+  const overdue = [];
+
+  for (const task of goalsData.tasks) {
+    if (!task.active || !task.minimumCadenceDays) continue;
+    const lastDate = task.completedDates?.slice(-1)[0];
+    if (!lastDate) {
+      // Never completed — check days since creation
+      const created = new Date(task.createdAt);
+      const daysSince = Math.floor((today - created) / (1000 * 60 * 60 * 24));
+      if (daysSince >= task.minimumCadenceDays) overdue.push({ task, daysSince });
+    } else {
+      const last = new Date(lastDate);
+      const daysSince = Math.floor((today - last) / (1000 * 60 * 60 * 24));
+      if (daysSince >= task.minimumCadenceDays) overdue.push({ task, daysSince });
+    }
+  }
+
+  return overdue;
+}
+
+// Get all phone numbers that have reminders (used by reminders.js for nudge pass)
+function getAllPhonesWithReminders() {
+  const store = readFile('reminders');
+  return Object.keys(store);
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
@@ -453,6 +638,15 @@ module.exports = {
   addReminder,
   getDueReminders,
   markReminderFired,
+  suppressReminder,
+  getRemindersByTaskId,
+  updateReminder,
+  incrementConsecutiveMissed,
+  resetConsecutiveMissed,
+  getTaskCompletionRate,
+  getEngagementSummary,
+  getMinCadenceOverdueTasks,
+  getAllPhonesWithReminders,
   // Sessions
   getSessionState,
   setSessionState,
