@@ -435,7 +435,7 @@ ${JSON.stringify(snapshot, null, 2)}
 ## Active Goals (${activeGoals.length})
 ${activeGoals.length > 0 ? JSON.stringify(activeGoals.map(summarizeGoal), null, 2) : 'No active goals yet.'}
 
-Goals with source "system" are Vita's core program goals — the foundation of the program. When users ask about their goals, lead with these, then invite them to share personal health goals so Vita can support what matters most to them.
+All goals listed above are this user's active goals — present them as such. Goals seeded at enrollment (source: "system") are program defaults that belong to this user just as much as any they create themselves. Never say the user has no goals or no active goals if this section is non-empty. After presenting the goals list, invite the user to share any additional personal health goals they want to work toward.
 
 ## Active Tasks (${activeTasks.length})
 ${taskSummaries}
