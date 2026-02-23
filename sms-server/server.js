@@ -28,6 +28,7 @@ const { runClaudeTurn, runClaudeMediaTurn, resumeAfterConfirmation } = require('
 const { setBot, sendMessage } = require('./lib/telegram');
 const { prepareMediaForAnalysis } = require('./lib/media');
 const { initReminders } = require('./lib/reminders');
+const { detectEmergency } = require('./lib/emergency');
 
 // ── Startup: reset any sessions stuck in PROCESSING from a previous crash ─────
 
@@ -75,6 +76,20 @@ bot.on('message', async (msg) => {
      isDocument ? `[document: ${msg.document?.mime_type || 'unknown'}]` :
      `"${text.slice(0, 80)}"`)
   );
+
+  // ── Emergency intercept ────────────────────────────────────────────────────
+  // Fires BEFORE state machine and BEFORE any Claude call.
+  // Response is hardcoded — never AI-generated — for speed and reliability.
+  if (isText) {
+    const emergency = detectEmergency(text);
+    if (emergency) {
+      console.warn(`[bot] Emergency detected (${emergency.type}) for ${chatId}`);
+      db.setSessionState(chatId, 'IDLE');
+      db.deletePendingConfirmation(chatId);
+      await sendMessage(chatId, emergency.response);
+      return;
+    }
+  }
 
   let state = db.getSessionState(chatId);
 
