@@ -33,6 +33,21 @@ const { initReminders } = require('./lib/reminders');
 
 db.resetStuckProcessingStates();
 
+// ── Startup: seed default program goals for all existing users ────────────────
+// Idempotent — skips any user who already has system goals seeded.
+// Runs before polling begins so goals are present before the first message.
+try {
+  const existingPhones = db.getAllHealthRecordPhones();
+  for (const phone of existingPhones) {
+    db.ensureDefaultGoals(phone);
+  }
+  if (existingPhones.length > 0) {
+    console.log(`[db] Ensured default program goals for ${existingPhones.length} existing user(s)`);
+  }
+} catch (err) {
+  console.error('[db] Error seeding default goals on startup:', err.message);
+}
+
 // ── Telegram bot (polling) ────────────────────────────────────────────────────
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });

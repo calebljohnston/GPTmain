@@ -31,7 +31,12 @@ function getClient() {
  */
 async function runClaudeTurn(phone, userText, db) {
   // 0. Ensure default program goals are seeded (idempotent — skips if already done)
-  db.ensureDefaultGoals(phone);
+  try {
+    db.ensureDefaultGoals(phone);
+  } catch (err) {
+    console.error('[bot] Failed to seed default goals for', phone, ':', err.message);
+    // Non-fatal — continue with the message turn
+  }
 
   // 1. Persist the incoming user message
   db.appendMessage(phone, { role: 'user', content: userText });
@@ -143,6 +148,14 @@ async function runClaudeTurn(phone, userText, db) {
  * @returns {Promise<{ type: 'text'|'awaiting_confirmation', ... }>}
  */
 async function runClaudeMediaTurn(phone, mediaPayload, caption, db) {
+  // 0. Ensure default program goals are seeded (idempotent — skips if already done)
+  try {
+    db.ensureDefaultGoals(phone);
+  } catch (err) {
+    console.error('[bot] Failed to seed default goals for', phone, ':', err.message);
+    // Non-fatal — continue with the media turn
+  }
+
   const { base64, mimeType, isDocument, fileName } = mediaPayload;
 
   // 1. Build in-memory media block (never written to disk)
