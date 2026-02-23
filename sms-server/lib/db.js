@@ -624,6 +624,23 @@ function resetStuckProcessingStates() {
   }
 }
 
+// Returns an array of phone/chatId strings where state === 'PROCESSING'
+// and the session has been in that state longer than thresholdMs.
+// Used by the proactive sweep in server.js to reset hung sessions without
+// requiring an inbound message to trigger the check.
+function getStuckProcessingSessions(thresholdMs) {
+  const store = readFile('sessions');
+  const now = Date.now();
+  return Object.entries(store)
+    .filter(([, entry]) => {
+      const state = typeof entry === 'object' ? entry.state : entry;
+      if (state !== 'PROCESSING') return false;
+      if (!entry || typeof entry !== 'object' || !entry.updatedAt) return false;
+      return (now - new Date(entry.updatedAt).getTime()) > thresholdMs;
+    })
+    .map(([phone]) => phone);
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function generateId(prefix = 'id') {
@@ -675,6 +692,7 @@ module.exports = {
   setSessionState,
   getSessionAge,
   resetStuckProcessingStates,
+  getStuckProcessingSessions,
   // Utils
   generateId,
   createEmptyHealthRecord,

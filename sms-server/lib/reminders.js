@@ -45,7 +45,7 @@ async function generateReminderMessage(name, taskTitle, engagement) {
       model: 'claude-haiku-4-5',
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }, { timeout: 30_000 });
     return response.content[0]?.text?.trim() || fallbackMessage(name, taskTitle);
   } catch (err) {
     console.error('[reminders] Claude message generation failed:', err.message);
@@ -71,7 +71,7 @@ async function sendMinCadenceNudge(phone, task, daysSince, name) {
       model: 'claude-haiku-4-5',
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }, { timeout: 30_000 });
     msg = response.content[0]?.text?.trim() ||
       `Hey ${name}! It's been ${daysSince} days since your last ${task.title}. Just a gentle check-in!`;
   } catch (err) {

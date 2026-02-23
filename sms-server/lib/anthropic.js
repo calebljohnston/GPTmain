@@ -44,7 +44,7 @@ async function runClaudeTurn(phone, userText, db) {
     system: systemPrompt,
     tools: TOOL_DEFINITIONS,
     messages,
-  });
+  }, { timeout: 75_000 });
 
   // 4. Extract text and tool calls from response
   const textBlocks = response.content.filter((b) => b.type === 'text');
@@ -177,7 +177,7 @@ async function runClaudeMediaTurn(phone, mediaPayload, caption, db) {
   };
   if (isDocument) requestOptions.betas = ['pdfs-2024-09-25'];
 
-  const response = await getClient().messages.create(requestOptions);
+  const response = await getClient().messages.create(requestOptions, { timeout: 75_000 });
 
   // 5–9. Identical to runClaudeTurn from here
   const textBlocks = response.content.filter((b) => b.type === 'text');
@@ -330,7 +330,7 @@ async function followUpTurn(phone, db) {
     system: systemPrompt,
     tools: TOOL_DEFINITIONS,
     messages,
-  });
+  }, { timeout: 75_000 });
 
   const textBlocks = response.content.filter((b) => b.type === 'text');
   const toolCalls = response.content.filter((b) => b.type === 'tool_use');

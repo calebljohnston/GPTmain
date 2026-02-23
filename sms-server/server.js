@@ -262,3 +262,18 @@ app.listen(PORT, () => console.log(`[server] Health check endpoint on port ${POR
 // ── Start reminders ───────────────────────────────────────────────────────────
 
 initReminders(db);
+
+// Proactive stuck-state sweep: catches sessions that are hung in PROCESSING
+// even when the user hasn't sent a follow-up message (reactive timeout is insufficient).
+// Runs every 30s; resets any PROCESSING session older than PROCESSING_TIMEOUT_MS.
+setInterval(() => {
+  try {
+    const stuck = db.getStuckProcessingSessions(PROCESSING_TIMEOUT_MS);
+    for (const chatId of stuck) {
+      console.warn(`[bot] Proactive sweep: resetting stuck PROCESSING for ${chatId}`);
+      db.setSessionState(chatId, 'IDLE');
+    }
+  } catch (err) {
+    console.error('[bot] Proactive sweep error:', err.message);
+  }
+}, 30_000);
