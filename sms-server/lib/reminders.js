@@ -153,6 +153,118 @@ async function minCadencePass(db) {
   }
 }
 
+// ── System nudges (always-on, non-disableable) ────────────────────────────────
+// These run at 9am daily and check three conditions independently.
+// They are not part of the user-managed reminder system and cannot be paused
+// through any tool or command.
+
+function daysBetween(isoOrDate, now) {
+  return Math.floor((now - new Date(isoOrDate)) / (1000 * 60 * 60 * 24));
+}
+
+async function generateSystemMessage(name, type, daysSince) {
+  const prompts = {
+    bp: daysSince === Infinity
+      ? `Write a short, warm message for ${name} letting them know Vita has no blood pressure readings on file yet and encouraging them to share one when they get a chance. Under 40 words, plain text, friendly tone.`
+      : `Write a short, warm message for ${name} checking in on their blood pressure — it's been ${daysSince} days since their last reading. Encourage them to take one today. Under 40 words, plain text, no pressure.`,
+    weight: daysSince === Infinity
+      ? `Write a short, warm message for ${name} letting them know Vita has no weight on file yet and encouraging them to share a reading. Under 40 words, plain text, non-judgmental.`
+      : `Write a short, warm message for ${name} noting it's been ${daysSince} days since their last weight check-in. Encourage them to share an update. Under 40 words, plain text, supportive.`,
+    medication: `Write a short, warm monthly check-in message for ${name} asking if they're having any trouble getting their prescriptions filled this month. Under 40 words, plain text, caring tone.`,
+  };
+
+  const fallbacks = {
+    bp: daysSince === Infinity
+      ? `Hey ${name}! Vita doesn't have any blood pressure readings on file yet. Could you share one when you get a chance?`
+      : `Hey ${name}! It's been ${daysSince} days since your last blood pressure reading. Worth taking one today?`,
+    weight: daysSince === Infinity
+      ? `Hey ${name}! Vita doesn't have a weight on file yet. Could you share a reading whenever you get a chance?`
+      : `Hey ${name}! It's been ${daysSince} days since your last weight check-in. Want to share an update?`,
+    medication: `Hey ${name}! Monthly check-in — any issues getting your prescriptions filled this month? Just reply if anything's come up.`,
+  };
+
+  try {
+    const response = await getClient().messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: prompts[type] }],
+    }, { timeout: 30_000 });
+    return response.content[0]?.text?.trim() || fallbacks[type];
+  } catch (err) {
+    console.error(`[reminders] System message generation failed (${type}):`, err.message);
+    return fallbacks[type];
+  }
+}
+
+async function systemNudgePass(db) {
+  const phones = db.getAllHealthRecordPhones();
+  if (!phones.length) return;
+  console.log(`[reminders] Running system nudge pass for ${phones.length} user(s)`);
+
+  const now   = new Date();
+  const today = now.toISOString().split('T')[0];
+
+  for (const phone of phones) {
+    let name = 'there';
+    try {
+      const record = db.getHealthRecord(phone);
+      name = record.demographics?.name || 'there';
+    } catch { /* use default */ }
+
+    let nudge = {};
+    try { nudge = db.getSystemNudgeState(phone); } catch { /* use empty */ }
+
+    // ── Blood pressure: nudge if no reading in 7+ days ─────────────────────
+    try {
+      const lastBP      = db.getLastVitalDate(phone, 'bloodPressure');
+      const bpDays      = lastBP ? daysBetween(lastBP, now) : Infinity;
+      const bpNudgeDays = nudge.lastBPNudge ? daysBetween(nudge.lastBPNudge, now) : Infinity;
+
+      if (bpDays >= 7 && bpNudgeDays >= 7) {
+        const msg = await generateSystemMessage(name, 'bp', bpDays);
+        await sendMessage(phone, msg);
+        db.setSystemNudgeState(phone, 'lastBPNudge', today);
+        console.log(`[reminders] Sent BP nudge to ${phone} (${bpDays === Infinity ? 'never recorded' : `${bpDays}d ago`})`);
+      }
+    } catch (err) {
+      console.error(`[reminders] BP nudge failed for ${phone}:`, err.message);
+    }
+
+    // ── Weight: nudge if no reading in 30+ days ─────────────────────────────
+    try {
+      const lastWeight      = db.getLastVitalDate(phone, 'weight');
+      const weightDays      = lastWeight ? daysBetween(lastWeight, now) : Infinity;
+      const weightNudgeDays = nudge.lastWeightNudge ? daysBetween(nudge.lastWeightNudge, now) : Infinity;
+
+      if (weightDays >= 30 && weightNudgeDays >= 30) {
+        const msg = await generateSystemMessage(name, 'weight', weightDays);
+        await sendMessage(phone, msg);
+        db.setSystemNudgeState(phone, 'lastWeightNudge', today);
+        console.log(`[reminders] Sent weight nudge to ${phone} (${weightDays === Infinity ? 'never recorded' : `${weightDays}d ago`})`);
+      }
+    } catch (err) {
+      console.error(`[reminders] Weight nudge failed for ${phone}:`, err.message);
+    }
+
+    // ── Medication check-in: monthly, only if user has active medications ───
+    try {
+      const record = db.getHealthRecord(phone);
+      const activeMeds = (record.medications || []).filter((m) => m.active !== false);
+      if (activeMeds.length > 0) {
+        const medNudgeDays = nudge.lastMedCheckIn ? daysBetween(nudge.lastMedCheckIn, now) : Infinity;
+        if (medNudgeDays >= 30) {
+          const msg = await generateSystemMessage(name, 'medication', null);
+          await sendMessage(phone, msg);
+          db.setSystemNudgeState(phone, 'lastMedCheckIn', today);
+          console.log(`[reminders] Sent medication check-in to ${phone}`);
+        }
+      }
+    } catch (err) {
+      console.error(`[reminders] Medication check-in failed for ${phone}:`, err.message);
+    }
+  }
+}
+
 // ── Main init ─────────────────────────────────────────────────────────────────
 
 function initReminders(db) {
@@ -171,6 +283,15 @@ function initReminders(db) {
         await midnightPass(db, today);
       } catch (err) {
         console.error('[reminders] Midnight pass error:', err.message);
+      }
+    }
+
+    // ── 09:00 pass: system nudges (BP, weight, medication check-in) ───────
+    if (hours === '09' && minutes === '00') {
+      try {
+        await systemNudgePass(db);
+      } catch (err) {
+        console.error('[reminders] System nudge pass error:', err.message);
       }
     }
 
@@ -246,7 +367,7 @@ function initReminders(db) {
     }
   });
 
-  console.log('[reminders] Reminder cron started (every minute, with 23:59 missed-pass + 11:00 nudge-pass)');
+  console.log('[reminders] Reminder cron started (every minute, with 09:00 system-nudge + 11:00 cadence-nudge + 23:59 missed-pass)');
 }
 
 module.exports = { initReminders };

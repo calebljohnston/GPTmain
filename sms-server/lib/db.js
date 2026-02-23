@@ -641,6 +641,36 @@ function getStuckProcessingSessions(thresholdMs) {
     .map(([phone]) => phone);
 }
 
+// ── System Nudge State ────────────────────────────────────────────────────────
+// Tracks the last time each system-level nudge (BP, weight, medication check-in)
+// was sent per user. Stored in system_nudges.json — separate from user-managed reminders.
+
+function getAllHealthRecordPhones() {
+  const store = readFile('health_records');
+  return Object.keys(store);
+}
+
+// Returns the recordedAt ISO string of the most recent entry for a vital, or null.
+function getLastVitalDate(phone, vitalKey) {
+  const record = getHealthRecord(phone);
+  const entries = (record.vitals && record.vitals[vitalKey]) || [];
+  if (!entries.length) return null;
+  // appendVital always appends in order, so the last element is the most recent
+  return entries[entries.length - 1].recordedAt || null;
+}
+
+function getSystemNudgeState(phone) {
+  const store = readFile('system_nudges');
+  return store[phone] || {};
+}
+
+function setSystemNudgeState(phone, key, dateStr) {
+  const store = readFile('system_nudges');
+  if (!store[phone]) store[phone] = {};
+  store[phone][key] = dateStr;
+  writeFile('system_nudges', store);
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function generateId(prefix = 'id') {
@@ -687,6 +717,11 @@ module.exports = {
   // Document extractions
   saveDocumentExtraction,
   getDocumentExtractions,
+  // System nudges
+  getAllHealthRecordPhones,
+  getLastVitalDate,
+  getSystemNudgeState,
+  setSystemNudgeState,
   // Sessions
   getSessionState,
   setSessionState,

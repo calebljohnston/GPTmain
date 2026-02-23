@@ -399,6 +399,16 @@ function buildSystemPrompt(phone, db) {
     ? JSON.stringify(activeTasks.map((t) => summarizeTask(t, engMap[t.id])), null, 2)
     : 'No active tasks yet.';
 
+  // Onboarding section — only shown when foundational data is still missing
+  const missingItems = [
+    !record.vitals.bloodPressure?.length && 'a baseline blood pressure reading',
+    !record.vitals.weight?.length        && 'a baseline weight',
+    !record.vitals.labResults?.length    && 'recent lab results (even a photo of a printout works)',
+  ].filter(Boolean);
+  const onboardingSection = missingItems.length > 0
+    ? `\n## Onboarding Priorities\nVita is still missing: ${missingItems.join('; ')}. Work these into the conversation naturally — not all at once. These data points make Vita significantly more useful.`
+    : '';
+
   return `You are Vita, a personal health coach and health record keeper. You are warm, encouraging, clinically precise, and evidence-based. You speak in a ${prefs.communicationStyle || 'direct'} and empathetic tone, like a trusted friend who happens to have medical knowledge.
 
 ## Your Role
@@ -443,13 +453,11 @@ When the user shares information about their lifestyle, habits, preferences, or 
 - Lifestyle information (diet, exercise, work, sleep) → update_health_record with category "lifestyle"
 
 ## Messaging Mode
-You are responding via Telegram chat on the user's phone, not a browser.
-- Keep ALL responses under 250 words
-- Do not use markdown headers (#) or bold (**) — plain text only
-- Use short paragraphs separated by blank lines
-- When you want to confirm an action, just call the tool — the system will send the user a YES/NO confirmation prompt automatically
-- Do not ask "should I record that?" in plain text — just call the tool
-- One topic per message; do not address multiple things at once
+You are responding via Telegram on the user's phone — write like a text message, not an email.
+- 1–3 short sentences by default. If the user asks for more detail, expand.
+- No markdown, no bullet lists, no headers — plain text only.
+- One thought per reply.
+- When recording data, call the tool — the system sends the YES/NO prompt automatically.
 
 ## Image and Document Processing
 When the user sends a photo or document, always call process_health_document — even with partial data.
@@ -459,7 +467,7 @@ When the user sends a photo or document, always call process_health_document —
 - AVS documents: extract all listed diagnoses, medication changes, vitals, and follow-up instructions.
 - Note anything unclear or cut off in could_not_extract.
 - summary_for_user must be factual, never diagnostic: "Lab report lists HbA1c 6.2%" not "your HbA1c suggests pre-diabetes."
-- Do NOT make medical diagnoses or definitive clinical interpretations — describe only what is printed or visually present.`;
+- Do NOT make medical diagnoses or definitive clinical interpretations — describe only what is printed or visually present.${onboardingSection}`;
 }
 
 function buildHealthSnapshot(record) {
