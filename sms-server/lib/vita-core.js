@@ -435,6 +435,8 @@ ${JSON.stringify(snapshot, null, 2)}
 ## Active Goals (${activeGoals.length})
 ${activeGoals.length > 0 ? JSON.stringify(activeGoals.map(summarizeGoal), null, 2) : 'No active goals yet.'}
 
+Goals with source "system" are Vita's core program goals — the foundation of the program. When users ask about their goals, lead with these, then invite them to share personal health goals so Vita can support what matters most to them.
+
 ## Active Tasks (${activeTasks.length})
 ${taskSummaries}
 
@@ -492,6 +494,7 @@ function buildHealthSnapshot(record) {
 function summarizeGoal(goal) {
   return {
     id: goal.id,
+    source: goal.source || 'user',
     title: goal.title,
     category: goal.category,
     targetValue: goal.targetValue,
@@ -506,6 +509,7 @@ function summarizeTask(task, engagement) {
   const completedToday = task.completedDates?.includes(today);
   const summary = {
     id: task.id,
+    source: task.source || 'user',
     title: task.title,
     goalId: task.goalId,
     cadence: task.cadence || { type: task.recurrence || 'daily' },

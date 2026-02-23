@@ -30,6 +30,9 @@ function getClient() {
  *   { type: 'awaiting_confirmation', summary: string }
  */
 async function runClaudeTurn(phone, userText, db) {
+  // 0. Ensure default program goals are seeded (idempotent — skips if already done)
+  db.ensureDefaultGoals(phone);
+
   // 1. Persist the incoming user message
   db.appendMessage(phone, { role: 'user', content: userText });
 

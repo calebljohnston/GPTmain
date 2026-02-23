@@ -641,6 +641,115 @@ function getStuckProcessingSessions(thresholdMs) {
     .map(([phone]) => phone);
 }
 
+// ── Default Program Goals ─────────────────────────────────────────────────────
+// Seeds three core goals + six tasks for every user on first interaction.
+// Idempotent: checks for any goal with source === 'system' before writing.
+// Baseline tasks are auto-completed if the user already has that data on file.
+
+function ensureDefaultGoals(phone) {
+  const data = getGoals(phone);
+  const record = getHealthRecord(phone);
+
+  // Already seeded — skip (check for any system-sourced goal)
+  if (data.goals.some((g) => g.source === 'system')) return;
+
+  const now   = new Date().toISOString();
+  const today = now.split('T')[0];
+
+  // ── Goal 1: Blood Pressure Monitoring ──────────────────────────────────────
+  const bpGoalId      = generateId('goal');
+  const bpBaselineDone = (record.vitals?.bloodPressure?.length > 0);
+
+  data.goals.push({
+    id: bpGoalId, title: 'Blood Pressure Monitoring',
+    category: 'custom', source: 'system',
+    description: 'Track blood pressure consistently for a clear picture of cardiovascular health.',
+    targetValue: null, targetUnit: null, targetDate: null,
+    status: 'active', milestones: [], createdAt: now, lastUpdated: now,
+  });
+
+  data.tasks.push({
+    id: generateId('task'), title: 'Share a baseline blood pressure reading',
+    goalId: bpGoalId, type: 'measurement', source: 'system',
+    cadence: { type: 'once' }, recurrence: 'once',
+    dueTime: null, scheduleReminder: false, expiresAt: null,
+    minimumCadenceDays: null, active: !bpBaselineDone,
+    completedDates: bpBaselineDone ? [today] : [],
+    createdAt: now,
+  });
+
+  data.tasks.push({
+    id: generateId('task'), title: 'Log blood pressure daily',
+    goalId: bpGoalId, type: 'measurement', source: 'system',
+    cadence: { type: 'daily' }, recurrence: 'daily',
+    dueTime: null, scheduleReminder: false, expiresAt: null,
+    minimumCadenceDays: 7, active: true, completedDates: [], createdAt: now,
+  });
+
+  // ── Goal 2: Weight Tracking ─────────────────────────────────────────────────
+  const wtGoalId      = generateId('goal');
+  const wtBaselineDone = (record.vitals?.weight?.length > 0);
+
+  data.goals.push({
+    id: wtGoalId, title: 'Weight Tracking',
+    category: 'weight', source: 'system',
+    description: 'Establish a weight baseline and check in weekly to monitor trends.',
+    targetValue: null, targetUnit: null, targetDate: null,
+    status: 'active', milestones: [], createdAt: now, lastUpdated: now,
+  });
+
+  data.tasks.push({
+    id: generateId('task'), title: 'Share a baseline weight',
+    goalId: wtGoalId, type: 'measurement', source: 'system',
+    cadence: { type: 'once' }, recurrence: 'once',
+    dueTime: null, scheduleReminder: false, expiresAt: null,
+    minimumCadenceDays: null, active: !wtBaselineDone,
+    completedDates: wtBaselineDone ? [today] : [],
+    createdAt: now,
+  });
+
+  data.tasks.push({
+    id: generateId('task'), title: 'Log weight weekly',
+    goalId: wtGoalId, type: 'measurement', source: 'system',
+    cadence: { type: 'weekly' }, recurrence: 'weekly',
+    dueTime: null, scheduleReminder: false, expiresAt: null,
+    minimumCadenceDays: 30, active: true, completedDates: [], createdAt: now,
+  });
+
+  // ── Goal 3: Annual Lab Work ─────────────────────────────────────────────────
+  const labGoalId       = generateId('goal');
+  const labBaselineDone = (record.vitals?.labResults?.length > 0);
+
+  data.goals.push({
+    id: labGoalId, title: 'Annual Lab Work',
+    category: 'lab_values', source: 'system',
+    description: 'Get a routine lab panel done annually and share results with Vita.',
+    targetValue: null, targetUnit: null, targetDate: null,
+    status: 'active', milestones: [], createdAt: now, lastUpdated: now,
+  });
+
+  data.tasks.push({
+    id: generateId('task'), title: 'Share baseline lab results with Vita',
+    goalId: labGoalId, type: 'check', source: 'system',
+    cadence: { type: 'once' }, recurrence: 'once',
+    dueTime: null, scheduleReminder: false, expiresAt: null,
+    minimumCadenceDays: null, active: !labBaselineDone,
+    completedDates: labBaselineDone ? [today] : [],
+    createdAt: now,
+  });
+
+  data.tasks.push({
+    id: generateId('task'), title: 'Get annual labs done',
+    goalId: labGoalId, type: 'check', source: 'system',
+    cadence: { type: 'every_n_days', intervalDays: 365 }, recurrence: 'every_n_days',
+    dueTime: null, scheduleReminder: false, expiresAt: null,
+    minimumCadenceDays: 365, active: true, completedDates: [], createdAt: now,
+  });
+
+  saveGoals(phone, data);
+  console.log(`[db] Seeded default program goals for ${phone}`);
+}
+
 // ── System Nudge State ────────────────────────────────────────────────────────
 // Tracks the last time each system-level nudge (BP, weight, medication check-in)
 // was sent per user. Stored in system_nudges.json — separate from user-managed reminders.
@@ -694,6 +803,7 @@ module.exports = {
   updateGoal,
   addTask,
   markTaskComplete,
+  ensureDefaultGoals,
   // Conversations
   appendMessage,
   getApiMessages,
