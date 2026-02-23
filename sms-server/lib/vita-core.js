@@ -403,7 +403,7 @@ function buildSystemPrompt(phone, db) {
   const missingItems = [
     !record.vitals.bloodPressure?.length && 'a baseline blood pressure reading',
     !record.vitals.weight?.length        && 'a baseline weight',
-    !record.vitals.labResults?.length    && 'recent lab results (even a photo of a printout works)',
+    !record.vitals.labResults?.length    && "lab results — Vita doesn't have any on file yet; if you've had recent labs, a photo of the printout is all it takes",
   ].filter(Boolean);
   const onboardingSection = missingItems.length > 0
     ? `\n## Onboarding Priorities\nVita is still missing: ${missingItems.join('; ')}. Work these into the conversation naturally — not all at once. These data points make Vita significantly more useful.`
