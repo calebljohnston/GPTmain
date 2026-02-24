@@ -6,6 +6,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { buildSystemPrompt, TOOL_DEFINITIONS, requiresConfirmation, executeTool } = require('./vita-core');
+const { classifyMessage } = require('./classifier');
 
 const MODEL = 'claude-haiku-4-5';
 const MAX_TOKENS       = 1024;
@@ -41,9 +42,13 @@ async function runClaudeTurn(phone, userText, db) {
   // 1. Persist the incoming user message
   db.appendMessage(phone, { role: 'user', content: userText });
 
-  // 2. Build history + system prompt
+  // 1b. Classify message (synchronous, ~0ms — no API call)
+  const classification = classifyMessage(userText);
+  console.log(`[classifier] ${phone}: tier=${classification.tier} cat=${classification.category} mode=${classification.mode} conf=${classification.confidence}${classification.emergency ? ' EMERGENCY' : ''}`);
+
+  // 2. Build history + system prompt (with mode-specific instructions injected)
   const messages = db.getApiMessages(phone);
-  const systemPrompt = buildSystemPrompt(phone, db);
+  const systemPrompt = buildSystemPrompt(phone, db, classification);
 
   // 3. Call Claude (non-streaming)
   const response = await getClient().messages.create({
@@ -183,11 +188,15 @@ async function runClaudeMediaTurn(phone, mediaPayload, caption, db) {
     { role: 'user', content: [mediaBlock, { type: 'text', text: textPart }] },
   ];
 
-  // 4. Call Claude with higher token limit; PDFs require the beta header
+  // 4. Classify caption (if any) and call Claude with higher token limit
+  const mediaClassification = caption
+    ? classifyMessage(caption)
+    : { tier: 3, category: '3A', mode: 'EDUCATION_HYPERTENSION', confidence: 'low', emergency: false };
+
   const requestOptions = {
     model: MODEL,
     max_tokens: MAX_TOKENS_MEDIA,
-    system: buildSystemPrompt(phone, db),
+    system: buildSystemPrompt(phone, db, mediaClassification),
     tools: TOOL_DEFINITIONS,
     messages: apiMessages,
   };

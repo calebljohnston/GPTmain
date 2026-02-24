@@ -25,7 +25,8 @@ if [ -z "$SERVER_IP" ]; then
 fi
 
 echo "→ Syncing data files to $SERVER_USER@$SERVER_IP..."
-rsync -az --mkpath \
+ssh "$SERVER_USER@$SERVER_IP" "mkdir -p $DEPLOY_PATH/sms-server/data"
+rsync -az \
   "$REPO_ROOT/sms-server/data/" \
   "$SERVER_USER@$SERVER_IP:$DEPLOY_PATH/sms-server/data/"
 
