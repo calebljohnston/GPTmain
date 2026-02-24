@@ -86,6 +86,9 @@ bot.on('message', async (msg) => {
       console.warn(`[bot] Emergency detected (${emergency.type}) for ${chatId}`);
       db.setSessionState(chatId, 'IDLE');
       db.deletePendingConfirmation(chatId);
+      // Write both sides to history so Claude has context when the user replies
+      db.appendMessage(chatId, { role: 'user', content: text });
+      db.appendMessage(chatId, { role: 'assistant', content: emergency.response });
       await sendMessage(chatId, emergency.response);
       return;
     }
