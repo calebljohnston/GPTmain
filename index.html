@@ -2,15 +2,128 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Buttons</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Dungeon Thread</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Hello World</h1>
-    <p>Check out these colorful buttons:</p>
-    <button class="btn-blue">Blue Button</button>
-    <button class="btn-green">Green Button</button>
-    <button class="btn-red">Red Button</button>
+    <main class="app-shell">
+        <section class="hero-panel panel">
+            <div>
+                <p class="eyebrow">Mobile-first roguelike RPG starter</p>
+                <h1>Dungeon Thread</h1>
+                <p class="intro">
+                    Explore procedural floors, survive turn-based battles, grab relics,
+                    and use the clean systems below as a foundation for your own classes,
+                    quests, crafting, meta-progression, and content updates.
+                </p>
+            </div>
+            <button id="new-run" class="primary-btn">New Run</button>
+        </section>
+
+        <section class="game-layout">
+            <div class="panel map-panel">
+                <div class="hud-strip">
+                    <div>
+                        <span class="label">Floor</span>
+                        <strong id="floor-label">1</strong>
+                    </div>
+                    <div>
+                        <span class="label">Turns</span>
+                        <strong id="turn-label">0</strong>
+                    </div>
+                    <div>
+                        <span class="label">Goal</span>
+                        <strong id="goal-label">Reach the exit</strong>
+                    </div>
+                </div>
+                <div id="map" class="map" aria-label="Dungeon map"></div>
+                <div class="legend">
+                    <span><i class="tile hero"></i>You</span>
+                    <span><i class="tile enemy"></i>Enemy</span>
+                    <span><i class="tile relic"></i>Relic</span>
+                    <span><i class="tile potion"></i>Potion</span>
+                    <span><i class="tile exit"></i>Exit</span>
+                </div>
+            </div>
+
+            <aside class="sidebar">
+                <section class="panel stats-panel">
+                    <div class="stat-grid">
+                        <article>
+                            <span class="label">HP</span>
+                            <strong id="hp-label">--</strong>
+                        </article>
+                        <article>
+                            <span class="label">Attack</span>
+                            <strong id="attack-label">--</strong>
+                        </article>
+                        <article>
+                            <span class="label">Defense</span>
+                            <strong id="defense-label">--</strong>
+                        </article>
+                        <article>
+                            <span class="label">Energy</span>
+                            <strong id="energy-label">--</strong>
+                        </article>
+                        <article>
+                            <span class="label">Potions</span>
+                            <strong id="potions-label">--</strong>
+                        </article>
+                        <article>
+                            <span class="label">Relics</span>
+                            <strong id="relics-label">--</strong>
+                        </article>
+                    </div>
+                    <div class="progress-wrap">
+                        <div>
+                            <span class="label">XP</span>
+                            <strong id="xp-label">0 / 0</strong>
+                        </div>
+                        <div class="progress-bar"><span id="xp-bar"></span></div>
+                    </div>
+                </section>
+
+                <section class="panel action-panel">
+                    <div class="section-heading">
+                        <h2>Actions</h2>
+                        <p>Big touch targets for phones.</p>
+                    </div>
+                    <div class="actions">
+                        <button data-action="heal">Drink Potion</button>
+                        <button data-action="wait">Wait / Recover</button>
+                        <button data-action="burst">Burst Strike</button>
+                    </div>
+                    <div class="controls">
+                        <button data-move="up">▲</button>
+                        <div>
+                            <button data-move="left">◀</button>
+                            <button data-move="down">▼</button>
+                            <button data-move="right">▶</button>
+                        </div>
+                    </div>
+                    <p class="hint">Tip: keyboard arrows/WASD also work on desktop for faster testing.</p>
+                </section>
+
+                <section class="panel upgrade-panel">
+                    <div class="section-heading">
+                        <h2>Build Path</h2>
+                        <p>Pick one upgrade every floor.</p>
+                    </div>
+                    <div id="upgrade-options" class="upgrade-options"></div>
+                </section>
+
+                <section class="panel log-panel">
+                    <div class="section-heading">
+                        <h2>Battle Log</h2>
+                        <p>Latest events appear first.</p>
+                    </div>
+                    <ul id="log" class="log"></ul>
+                </section>
+            </aside>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
 </body>
 </html>
