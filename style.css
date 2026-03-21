@@ -509,7 +509,96 @@ body {
 @media (max-width: 900px) {
   #game-layout { grid-template-columns: 170px 1fr 180px; }
 }
+
+/* ===== MOBILE ===== */
 @media (max-width: 650px) {
-  #game-layout { grid-template-columns: 1fr; }
-  #panel-player, #panel-inventory { border: none; border-bottom: 1px solid var(--border); }
+  body { font-size: 14px; }
+
+  /* Stack panels vertically */
+  #screen-game.active { display: block; overflow-y: auto; }
+  #game-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: unset;
+  }
+
+  /* Collapse player panel into a compact top bar */
+  #panel-player {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 10px;
+  }
+  #player-header { padding-bottom: 6px; margin-bottom: 8px; }
+  #ui-player-name { font-size: 0.9rem; }
+
+  /* Show stats in a 2-col grid on mobile */
+  #player-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+  }
+  .exp-row, .hp-row, .mp-row { grid-column: 1 / -1; }
+
+  /* Hide skills panel on mobile (visible in combat via buttons) */
+  #skills-panel { display: none; }
+
+  /* Main panel fills screen */
+  #panel-main { min-height: 60vh; }
+
+  .view { padding: 10px; }
+
+  /* World action buttons: 2×2 grid */
+  #world-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .action-btn { text-align: center; padding: 10px 8px; font-size: 0.85rem; }
+
+  /* Map smaller on mobile */
+  #world-map-grid { max-width: 220px; }
+  .map-cell { font-size: 1rem; }
+
+  /* Combat actions: wrap nicely */
+  #combat-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  #combat-skills { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+  .combat-btn { padding: 10px 8px; font-size: 0.8rem; text-align: center; }
+
+  /* Enemy sprite bigger on mobile for drama */
+  .enemy-sprite { font-size: 5rem; }
+
+  /* Combat log scrollable, limited height */
+  #combat-log { max-height: 120px; }
+  #event-log  { max-height: 160px; }
+
+  /* Inventory panel at bottom */
+  #panel-inventory {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding: 10px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  #inventory-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+  /* Title screen */
+  .title-box { padding: 24px 16px; }
+  .game-title { font-size: 2rem; letter-spacing: 2px; }
+  .class-cards { flex-direction: column; align-items: center; }
+  .class-card { width: 100%; max-width: 280px; }
+  #name-form { flex-direction: column; }
+  #player-name-input { width: 100%; margin-right: 0; margin-bottom: 10px; }
+
+  /* Overlays full-width */
+  .overlay-box { padding: 20px 16px; min-width: unset; width: 90%; }
+  #levelup-stat-choices { grid-template-columns: 1fr 1fr; }
+  .stat-choice-btn { padding: 8px 10px; font-size: 0.78rem; }
+
+  /* Shop & travel */
+  .shop-item { flex-wrap: wrap; gap: 6px; }
+  .area-option { flex-direction: column; gap: 6px; }
 }

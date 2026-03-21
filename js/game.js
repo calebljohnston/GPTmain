@@ -236,15 +236,32 @@ const game = {
       this.combat._addLog('No usable items!', 'bad');
       return;
     }
-    // Simple prompt — highlight items or just use first health potion
-    // For a real UI you'd show a small popup; here we auto-use best potion
-    const potionEntry = consumables.find(({ item }) =>
-      item.effect && item.effect.heal && this.player.hp < this.player.maxHp
-    ) || consumables[0];
 
-    if (potionEntry) {
-      this.combat.useItem(potionEntry.idx);
-    }
+    // Build a small inline picker above the combat buttons
+    const existing = document.getElementById('combat-item-picker');
+    if (existing) { existing.remove(); return; } // toggle off if already open
+
+    const picker = document.createElement('div');
+    picker.id = 'combat-item-picker';
+    picker.style.cssText = `
+      background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+      padding:8px; margin-bottom:8px; display:flex; flex-wrap:wrap; gap:6px;
+      grid-column: 1 / -1;`;
+
+    consumables.forEach(({ item, idx }) => {
+      const btn = document.createElement('button');
+      btn.className = 'combat-btn';
+      btn.style.fontSize = '0.75rem';
+      btn.textContent = `${item.icon || ''} ${item.name}${item.qty > 1 ? ' ×' + item.qty : ''}`;
+      btn.addEventListener('click', () => {
+        picker.remove();
+        this.combat.useItem(idx);
+      });
+      picker.appendChild(btn);
+    });
+
+    const actionsEl = document.getElementById('combat-actions');
+    actionsEl.insertBefore(picker, actionsEl.firstChild);
   },
 
   // ---- SHOP ----
