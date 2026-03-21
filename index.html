@@ -1,16 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Buttons</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Core RPG</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Hello World</h1>
-    <p>Check out these colorful buttons:</p>
-    <button class="btn-blue">Blue Button</button>
-    <button class="btn-green">Green Button</button>
-    <button class="btn-red">Red Button</button>
+
+<!-- TITLE SCREEN -->
+<div id="screen-title" class="screen active">
+  <div class="title-box">
+    <h1 class="game-title">⚔ CORE RPG ⚔</h1>
+    <p class="subtitle">A foundation for adventure</p>
+    <div id="class-select">
+      <h3>Choose Your Class</h3>
+      <div class="class-cards">
+        <div class="class-card" data-class="warrior">
+          <div class="class-icon">🗡️</div>
+          <div class="class-name">Warrior</div>
+          <div class="class-desc">High HP & STR. Wields heavy arms.</div>
+          <div class="class-stats">HP:120 STR:12 DEX:7 INT:5 DEF:10</div>
+        </div>
+        <div class="class-card" data-class="rogue">
+          <div class="class-icon">🗗</div>
+          <div class="class-name">Rogue</div>
+          <div class="class-desc">Fast & precise. High crit chance.</div>
+          <div class="class-stats">HP:85 STR:9 DEX:14 INT:7 DEF:6</div>
+        </div>
+        <div class="class-card" data-class="mage">
+          <div class="class-icon">🔮</div>
+          <div class="class-name">Mage</div>
+          <div class="class-desc">Powerful spells. Fragile body.</div>
+          <div class="class-stats">HP:65 STR:5 DEX:8 INT:15 DEF:4</div>
+        </div>
+      </div>
+    </div>
+    <div id="name-form" style="display:none">
+      <h3>Enter Your Name</h3>
+      <input type="text" id="player-name-input" placeholder="Hero name..." maxlength="20">
+      <button id="btn-start">Begin Adventure</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN GAME SCREEN -->
+<div id="screen-game" class="screen">
+  <div id="game-layout">
+
+    <!-- LEFT: Player Panel -->
+    <div id="panel-player">
+      <div id="player-header">
+        <span id="ui-player-name"></span>
+        <span id="ui-player-class"></span>
+      </div>
+      <div id="player-stats">
+        <div class="stat-row"><span>LVL</span><span id="ui-level">1</span></div>
+        <div class="stat-row exp-row">
+          <span>EXP</span>
+          <div class="bar-wrap"><div id="bar-exp" class="bar bar-exp"></div></div>
+          <span id="ui-exp-text">0/100</span>
+        </div>
+        <div class="stat-row hp-row">
+          <span>HP</span>
+          <div class="bar-wrap"><div id="bar-hp" class="bar bar-hp"></div></div>
+          <span id="ui-hp-text">100/100</span>
+        </div>
+        <div class="stat-row mp-row">
+          <span>MP</span>
+          <div class="bar-wrap"><div id="bar-mp" class="bar bar-mp"></div></div>
+          <span id="ui-mp-text">50/50</span>
+        </div>
+        <div class="stat-row"><span>⚔ ATK</span><span id="ui-atk">--</span></div>
+        <div class="stat-row"><span>🛡 DEF</span><span id="ui-def">--</span></div>
+        <div class="stat-row"><span>💰 Gold</span><span id="ui-gold">0</span></div>
+      </div>
+
+      <div id="skills-panel">
+        <h4>Skills</h4>
+        <div id="skill-list"></div>
+      </div>
+    </div>
+
+    <!-- CENTER: Main Content -->
+    <div id="panel-main">
+      <div id="location-bar">
+        <span id="ui-location">The Village</span>
+        <span id="ui-area-level"></span>
+      </div>
+
+      <!-- World View -->
+      <div id="view-world" class="view active">
+        <div id="world-map-grid"></div>
+        <div id="world-actions">
+          <button class="action-btn" id="btn-explore">⚔ Explore</button>
+          <button class="action-btn" id="btn-shop">🏪 Shop</button>
+          <button class="action-btn" id="btn-rest">🛌 Rest</button>
+          <button class="action-btn" id="btn-travel">🗺 Travel</button>
+        </div>
+        <div id="event-log"></div>
+      </div>
+
+      <!-- Combat View -->
+      <div id="view-combat" class="view">
+        <div id="combat-arena">
+          <div id="enemy-side">
+            <div id="ui-enemy-name">???</div>
+            <div id="ui-enemy-sprite" class="enemy-sprite"></div>
+            <div class="stat-row hp-row">
+              <span>HP</span>
+              <div class="bar-wrap"><div id="bar-enemy-hp" class="bar bar-hp"></div></div>
+              <span id="ui-enemy-hp">???</span>
+            </div>
+          </div>
+          <div id="combat-log"></div>
+        </div>
+        <div id="combat-actions">
+          <button class="combat-btn" id="btn-attack">⚔ Attack</button>
+          <div id="combat-skills"></div>
+          <button class="combat-btn" id="btn-item">🎒 Item</button>
+          <button class="combat-btn danger" id="btn-flee">💨 Flee</button>
+        </div>
+      </div>
+
+      <!-- Shop View -->
+      <div id="view-shop" class="view">
+        <h3>🏪 Shop</h3>
+        <div id="shop-inventory"></div>
+        <button class="action-btn" id="btn-shop-close">← Leave Shop</button>
+      </div>
+
+      <!-- Travel View -->
+      <div id="view-travel" class="view">
+        <h3>🗺 Where to Travel?</h3>
+        <div id="area-list"></div>
+        <button class="action-btn" id="btn-travel-close">← Cancel</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Inventory Panel -->
+    <div id="panel-inventory">
+      <h4>🎒 Inventory</h4>
+      <div id="inventory-list"></div>
+      <div id="equipped-panel">
+        <h4>⚙ Equipped</h4>
+        <div id="equipped-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div id="screen-gameover" class="screen">
+  <div class="title-box">
+    <h1>💀 GAME OVER</h1>
+    <p id="gameover-msg"></p>
+    <button id="btn-restart">Play Again</button>
+  </div>
+</div>
+
+<!-- LEVEL UP OVERLAY -->
+<div id="levelup-overlay" class="overlay hidden">
+  <div class="overlay-box">
+    <h2>✨ LEVEL UP! ✨</h2>
+    <p id="levelup-msg"></p>
+    <div id="levelup-stat-choices"></div>
+    <button id="btn-levelup-ok">Continue</button>
+  </div>
+</div>
+
+<!-- LOOT OVERLAY -->
+<div id="loot-overlay" class="overlay hidden">
+  <div class="overlay-box">
+    <h2>🎁 Loot!</h2>
+    <div id="loot-list"></div>
+    <button id="btn-loot-ok">Take All</button>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/player.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
 </body>
 </html>
