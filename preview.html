@@ -1,0 +1,2464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Core RPG</title>
+  <style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0d0d14;
+  --bg2:      #161625;
+  --bg3:      #1e1e32;
+  --border:   #2e2e50;
+  --text:     #d4d4e8;
+  --dim:      #7777a0;
+  --accent:   #6c6cff;
+  --gold:     #f0c040;
+  --green:    #40c060;
+  --red:      #e04040;
+  --blue:     #4090e0;
+  --purple:   #b04cff;
+  --hp-col:   #e04060;
+  --mp-col:   #4070e0;
+  --exp-col:  #c0a030;
+  --radius:   6px;
+}
+
+body {
+  font-family: 'Courier New', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ===== SCREENS ===== */
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; align-items: center; justify-content: center; }
+
+#screen-game {
+  display: none;
+  align-items: stretch;
+  padding: 0;
+}
+#screen-game.active { display: flex; }
+
+/* ===== TITLE SCREEN ===== */
+.title-box {
+  background: var(--bg2);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 40px 50px;
+  text-align: center;
+  max-width: 700px;
+  width: 90%;
+}
+
+.game-title {
+  font-size: 3rem;
+  color: var(--accent);
+  text-shadow: 0 0 20px var(--accent);
+  letter-spacing: 4px;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: var(--dim);
+  margin-bottom: 30px;
+  font-size: 1rem;
+}
+
+.class-cards {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 15px 0;
+}
+
+.class-card {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 15px 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg3);
+  min-width: 150px;
+  text-align: center;
+}
+
+.class-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.class-card.selected { border-color: var(--accent); background: #1a1a38; box-shadow: 0 0 12px var(--accent); }
+.class-icon { font-size: 2rem; margin-bottom: 5px; }
+.class-name { font-weight: bold; color: var(--accent); margin-bottom: 4px; }
+.class-desc { font-size: 0.75rem; color: var(--dim); margin-bottom: 6px; }
+.class-stats { font-size: 0.65rem; color: var(--gold); }
+
+#name-form { margin-top: 20px; }
+#name-form h3 { margin-bottom: 10px; color: var(--text); }
+
+#player-name-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 1rem;
+  width: 200px;
+  margin-right: 10px;
+}
+
+#btn-start, #btn-restart {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 9px 22px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 1rem;
+  transition: opacity 0.2s;
+}
+#btn-start:hover, #btn-restart:hover { opacity: 0.85; }
+
+/* ===== GAME LAYOUT ===== */
+#game-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr 220px;
+  width: 100%;
+  min-height: 100vh;
+  gap: 0;
+}
+
+/* ===== PANELS ===== */
+#panel-player, #panel-inventory {
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 14px 12px;
+  overflow-y: auto;
+}
+#panel-inventory { border-right: none; border-left: 1px solid var(--border); }
+
+#player-header {
+  text-align: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+#ui-player-name { font-size: 1rem; font-weight: bold; color: var(--accent); display: block; }
+#ui-player-class { font-size: 0.75rem; color: var(--gold); }
+
+/* ===== STAT ROWS ===== */
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  margin-bottom: 7px;
+  gap: 6px;
+}
+.stat-row > span:first-child { color: var(--dim); min-width: 36px; }
+.stat-row > span:last-child { color: var(--text); font-weight: bold; }
+
+.bar-wrap {
+  flex: 1;
+  background: var(--bg);
+  border-radius: 4px;
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.bar-hp  { background: var(--hp-col); }
+.bar-mp  { background: var(--mp-col); }
+.bar-exp { background: var(--exp-col); }
+
+/* ===== SKILLS ===== */
+#skills-panel { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 10px; }
+#skills-panel h4 { color: var(--dim); font-size: 0.75rem; margin-bottom: 8px; }
+
+.skill-entry {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 8px;
+  margin-bottom: 5px;
+  font-size: 0.72rem;
+}
+.skill-name { color: var(--purple); font-weight: bold; }
+.skill-cost { color: var(--mp-col); float: right; }
+.skill-desc { color: var(--dim); margin-top: 2px; }
+
+/* ===== MAIN PANEL ===== */
+#panel-main {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+#location-bar {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#ui-location { color: var(--gold); font-weight: bold; }
+#ui-area-level { color: var(--dim); font-size: 0.75rem; }
+
+.view { display: none; flex: 1; flex-direction: column; padding: 16px; overflow-y: auto; }
+.view.active { display: flex; }
+
+/* ===== WORLD VIEW ===== */
+#world-map-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-bottom: 14px;
+  max-width: 350px;
+}
+
+.map-cell {
+  aspect-ratio: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  cursor: default;
+}
+.map-cell.player { border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.map-cell.explored { background: var(--bg2); }
+
+#world-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.action-btn {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  transition: all 0.15s;
+}
+.action-btn:hover { border-color: var(--accent); color: var(--accent); }
+.action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ===== EVENT LOG ===== */
+#event-log {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  flex: 1;
+  overflow-y: auto;
+  max-height: 280px;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+.log-line { margin-bottom: 2px; }
+.log-line.good  { color: var(--green); }
+.log-line.bad   { color: var(--red); }
+.log-line.info  { color: var(--blue); }
+.log-line.gold  { color: var(--gold); }
+.log-line.dim   { color: var(--dim); }
+
+/* ===== COMBAT VIEW ===== */
+#combat-arena {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#enemy-side { text-align: center; }
+#ui-enemy-name { font-size: 1.1rem; font-weight: bold; color: var(--red); margin-bottom: 8px; }
+.enemy-sprite { font-size: 4rem; margin: 10px 0; text-shadow: 0 0 20px rgba(255,100,100,0.5); }
+
+#combat-log {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  flex: 1;
+}
+
+#combat-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+#combat-skills { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.combat-btn {
+  background: var(--bg3);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  transition: all 0.15s;
+}
+.combat-btn:hover { background: var(--accent); color: white; }
+.combat-btn.danger { border-color: var(--red); color: var(--red); }
+.combat-btn.danger:hover { background: var(--red); color: white; }
+.combat-btn.skill-btn { border-color: var(--purple); color: var(--purple); }
+.combat-btn.skill-btn:hover { background: var(--purple); color: white; }
+.combat-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ===== SHOP VIEW ===== */
+#shop-inventory { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+
+.shop-item {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.shop-item-info { flex: 1; }
+.shop-item-name { font-weight: bold; color: var(--text); font-size: 0.85rem; }
+.shop-item-desc { color: var(--dim); font-size: 0.72rem; margin-top: 2px; }
+.shop-item-price { color: var(--gold); font-weight: bold; white-space: nowrap; }
+.shop-item-buy {
+  background: var(--gold);
+  border: none;
+  color: #222;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: bold;
+  transition: opacity 0.15s;
+}
+.shop-item-buy:hover { opacity: 0.85; }
+.shop-item-buy:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ===== TRAVEL VIEW ===== */
+#area-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+
+.area-option {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.area-option:hover { border-color: var(--accent); }
+.area-option.locked { opacity: 0.4; cursor: not-allowed; }
+.area-name { font-weight: bold; color: var(--text); }
+.area-level { font-size: 0.75rem; color: var(--dim); }
+.area-desc { font-size: 0.75rem; color: var(--dim); margin-top: 2px; }
+.area-req { color: var(--red); font-size: 0.72rem; }
+
+/* ===== INVENTORY PANEL ===== */
+#panel-inventory h4 { color: var(--dim); font-size: 0.75rem; margin-bottom: 8px; }
+#inventory-list, #equipped-list { display: flex; flex-direction: column; gap: 5px; }
+#equipped-panel { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+
+.inv-item {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  position: relative;
+}
+.inv-item:hover { border-color: var(--accent); }
+.inv-item-name { font-weight: bold; color: var(--text); }
+.inv-item-type { color: var(--dim); font-size: 0.65rem; }
+.inv-item-stats { color: var(--green); font-size: 0.65rem; }
+
+.inv-item.equipped { border-color: var(--gold); }
+.inv-item .item-actions {
+  display: none;
+  gap: 4px;
+  margin-top: 5px;
+}
+.inv-item:hover .item-actions { display: flex; }
+
+.item-action-btn {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.65rem;
+}
+.item-action-btn:hover { color: var(--accent); border-color: var(--accent); }
+.item-action-btn.use { color: var(--green); border-color: var(--green); }
+.item-action-btn.drop { color: var(--red); }
+
+/* ===== OVERLAYS ===== */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.overlay.hidden { display: none; }
+
+.overlay-box {
+  background: var(--bg2);
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  padding: 30px 40px;
+  text-align: center;
+  min-width: 320px;
+  max-width: 500px;
+}
+.overlay-box h2 { color: var(--gold); margin-bottom: 14px; }
+
+#levelup-stat-choices {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.stat-choice-btn {
+  background: var(--bg3);
+  border: 2px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  transition: all 0.15s;
+}
+.stat-choice-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+#btn-levelup-ok, #btn-loot-ok {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 9px 24px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-top: 10px;
+}
+
+#loot-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; text-align: left; }
+.loot-entry {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+}
+.loot-entry .loot-name { color: var(--gold); font-weight: bold; }
+.loot-entry .loot-desc { color: var(--dim); font-size: 0.7rem; }
+
+/* ===== GAME OVER ===== */
+#screen-gameover h1 { color: var(--red); font-size: 3rem; margin-bottom: 14px; text-shadow: 0 0 20px var(--red); }
+#gameover-msg { color: var(--dim); margin-bottom: 20px; }
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+
+/* ===== RARITY COLORS ===== */
+.rarity-common   { color: var(--text); }
+.rarity-uncommon { color: var(--green); }
+.rarity-rare     { color: var(--blue); }
+.rarity-epic     { color: var(--purple); }
+.rarity-legend   { color: var(--gold); }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 900px) {
+  #game-layout { grid-template-columns: 170px 1fr 180px; }
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 650px) {
+  body { font-size: 14px; }
+
+  /* Stack panels vertically */
+  #screen-game.active { display: block; overflow-y: auto; }
+  #game-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: unset;
+  }
+
+  /* Collapse player panel into a compact top bar */
+  #panel-player {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 10px;
+  }
+  #player-header { padding-bottom: 6px; margin-bottom: 8px; }
+  #ui-player-name { font-size: 0.9rem; }
+
+  /* Show stats in a 2-col grid on mobile */
+  #player-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+  }
+  .exp-row, .hp-row, .mp-row { grid-column: 1 / -1; }
+
+  /* Hide skills panel on mobile (visible in combat via buttons) */
+  #skills-panel { display: none; }
+
+  /* Main panel fills screen */
+  #panel-main { min-height: 60vh; }
+
+  .view { padding: 10px; }
+
+  /* World action buttons: 2×2 grid */
+  #world-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .action-btn { text-align: center; padding: 10px 8px; font-size: 0.85rem; }
+
+  /* Map smaller on mobile */
+  #world-map-grid { max-width: 220px; }
+  .map-cell { font-size: 1rem; }
+
+  /* Combat actions: wrap nicely */
+  #combat-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  #combat-skills { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+  .combat-btn { padding: 10px 8px; font-size: 0.8rem; text-align: center; }
+
+  /* Enemy sprite bigger on mobile for drama */
+  .enemy-sprite { font-size: 5rem; }
+
+  /* Combat log scrollable, limited height */
+  #combat-log { max-height: 120px; }
+  #event-log  { max-height: 160px; }
+
+  /* Inventory panel at bottom */
+  #panel-inventory {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding: 10px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  #inventory-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+  /* Title screen */
+  .title-box { padding: 24px 16px; }
+  .game-title { font-size: 2rem; letter-spacing: 2px; }
+  .class-cards { flex-direction: column; align-items: center; }
+  .class-card { width: 100%; max-width: 280px; }
+  #name-form { flex-direction: column; }
+  #player-name-input { width: 100%; margin-right: 0; margin-bottom: 10px; }
+
+  /* Overlays full-width */
+  .overlay-box { padding: 20px 16px; min-width: unset; width: 90%; }
+  #levelup-stat-choices { grid-template-columns: 1fr 1fr; }
+  .stat-choice-btn { padding: 8px 10px; font-size: 0.78rem; }
+
+  /* Shop & travel */
+  .shop-item { flex-wrap: wrap; gap: 6px; }
+  .area-option { flex-direction: column; gap: 6px; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- TITLE SCREEN -->
+<div id="screen-title" class="screen active">
+  <div class="title-box">
+    <h1 class="game-title">⚔ CORE RPG ⚔</h1>
+    <p class="subtitle">A foundation for adventure</p>
+    <div id="class-select">
+      <h3>Choose Your Class</h3>
+      <div class="class-cards">
+        <div class="class-card" data-class="warrior">
+          <div class="class-icon">🗡️</div>
+          <div class="class-name">Warrior</div>
+          <div class="class-desc">High HP & STR. Wields heavy arms.</div>
+          <div class="class-stats">HP:120 STR:12 DEX:7 INT:5 DEF:10</div>
+        </div>
+        <div class="class-card" data-class="rogue">
+          <div class="class-icon">🗗</div>
+          <div class="class-name">Rogue</div>
+          <div class="class-desc">Fast & precise. High crit chance.</div>
+          <div class="class-stats">HP:85 STR:9 DEX:14 INT:7 DEF:6</div>
+        </div>
+        <div class="class-card" data-class="mage">
+          <div class="class-icon">🔮</div>
+          <div class="class-name">Mage</div>
+          <div class="class-desc">Powerful spells. Fragile body.</div>
+          <div class="class-stats">HP:65 STR:5 DEX:8 INT:15 DEF:4</div>
+        </div>
+      </div>
+    </div>
+    <div id="name-form" style="display:none">
+      <h3>Enter Your Name</h3>
+      <input type="text" id="player-name-input" placeholder="Hero name..." maxlength="20">
+      <button id="btn-start">Begin Adventure</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN GAME SCREEN -->
+<div id="screen-game" class="screen">
+  <div id="game-layout">
+
+    <!-- LEFT: Player Panel -->
+    <div id="panel-player">
+      <div id="player-header">
+        <span id="ui-player-name"></span>
+        <span id="ui-player-class"></span>
+      </div>
+      <div id="player-stats">
+        <div class="stat-row"><span>LVL</span><span id="ui-level">1</span></div>
+        <div class="stat-row exp-row">
+          <span>EXP</span>
+          <div class="bar-wrap"><div id="bar-exp" class="bar bar-exp"></div></div>
+          <span id="ui-exp-text">0/100</span>
+        </div>
+        <div class="stat-row hp-row">
+          <span>HP</span>
+          <div class="bar-wrap"><div id="bar-hp" class="bar bar-hp"></div></div>
+          <span id="ui-hp-text">100/100</span>
+        </div>
+        <div class="stat-row mp-row">
+          <span>MP</span>
+          <div class="bar-wrap"><div id="bar-mp" class="bar bar-mp"></div></div>
+          <span id="ui-mp-text">50/50</span>
+        </div>
+        <div class="stat-row"><span>⚔ ATK</span><span id="ui-atk">--</span></div>
+        <div class="stat-row"><span>🛡 DEF</span><span id="ui-def">--</span></div>
+        <div class="stat-row"><span>💰 Gold</span><span id="ui-gold">0</span></div>
+      </div>
+
+      <div id="skills-panel">
+        <h4>Skills</h4>
+        <div id="skill-list"></div>
+      </div>
+    </div>
+
+    <!-- CENTER: Main Content -->
+    <div id="panel-main">
+      <div id="location-bar">
+        <span id="ui-location">The Village</span>
+        <span id="ui-area-level"></span>
+      </div>
+
+      <!-- World View -->
+      <div id="view-world" class="view active">
+        <div id="world-map-grid"></div>
+        <div id="world-actions">
+          <button class="action-btn" id="btn-explore">⚔ Explore</button>
+          <button class="action-btn" id="btn-shop">🏪 Shop</button>
+          <button class="action-btn" id="btn-rest">🛌 Rest</button>
+          <button class="action-btn" id="btn-travel">🗺 Travel</button>
+        </div>
+        <div id="event-log"></div>
+      </div>
+
+      <!-- Combat View -->
+      <div id="view-combat" class="view">
+        <div id="combat-arena">
+          <div id="enemy-side">
+            <div id="ui-enemy-name">???</div>
+            <div id="ui-enemy-sprite" class="enemy-sprite"></div>
+            <div class="stat-row hp-row">
+              <span>HP</span>
+              <div class="bar-wrap"><div id="bar-enemy-hp" class="bar bar-hp"></div></div>
+              <span id="ui-enemy-hp">???</span>
+            </div>
+          </div>
+          <div id="combat-log"></div>
+        </div>
+        <div id="combat-actions">
+          <button class="combat-btn" id="btn-attack">⚔ Attack</button>
+          <div id="combat-skills"></div>
+          <button class="combat-btn" id="btn-item">🎒 Item</button>
+          <button class="combat-btn danger" id="btn-flee">💨 Flee</button>
+        </div>
+      </div>
+
+      <!-- Shop View -->
+      <div id="view-shop" class="view">
+        <h3>🏪 Shop</h3>
+        <div id="shop-inventory"></div>
+        <button class="action-btn" id="btn-shop-close">← Leave Shop</button>
+      </div>
+
+      <!-- Travel View -->
+      <div id="view-travel" class="view">
+        <h3>🗺 Where to Travel?</h3>
+        <div id="area-list"></div>
+        <button class="action-btn" id="btn-travel-close">← Cancel</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Inventory Panel -->
+    <div id="panel-inventory">
+      <h4>🎒 Inventory</h4>
+      <div id="inventory-list"></div>
+      <div id="equipped-panel">
+        <h4>⚙ Equipped</h4>
+        <div id="equipped-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div id="screen-gameover" class="screen">
+  <div class="title-box">
+    <h1>💀 GAME OVER</h1>
+    <p id="gameover-msg"></p>
+    <button id="btn-restart">Play Again</button>
+  </div>
+</div>
+
+<!-- LEVEL UP OVERLAY -->
+<div id="levelup-overlay" class="overlay hidden">
+  <div class="overlay-box">
+    <h2>✨ LEVEL UP! ✨</h2>
+    <p id="levelup-msg"></p>
+    <div id="levelup-stat-choices"></div>
+    <button id="btn-levelup-ok">Continue</button>
+  </div>
+</div>
+
+<!-- LOOT OVERLAY -->
+<div id="loot-overlay" class="overlay hidden">
+  <div class="overlay-box">
+    <h2>🎁 Loot!</h2>
+    <div id="loot-list"></div>
+    <button id="btn-loot-ok">Take All</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA.JS — All static game data: classes, items, enemies, areas
+// ============================================================
+
+const DATA = {
+
+  // ---- CLASSES ----
+  classes: {
+    warrior: {
+      name: 'Warrior',
+      icon: '🗡️',
+      baseStats: { hp: 120, mp: 30, str: 12, dex: 7, int: 5, def: 10 },
+      mpRegen: 3,
+      skills: ['power_strike', 'shield_bash'],
+      description: 'Tough melee fighter with high HP and defense.',
+    },
+    rogue: {
+      name: 'Rogue',
+      icon: '🗗',
+      baseStats: { hp: 85, mp: 45, str: 9, dex: 14, int: 7, def: 6 },
+      mpRegen: 5,
+      skills: ['backstab', 'smoke_bomb'],
+      description: 'Swift striker with high crit and dodge chance.',
+    },
+    mage: {
+      name: 'Mage',
+      icon: '🔮',
+      baseStats: { hp: 65, mp: 90, str: 5, dex: 8, int: 15, def: 4 },
+      mpRegen: 12,
+      skills: ['fireball', 'ice_lance'],
+      description: 'Fragile spellcaster with devastating magic.',
+    },
+  },
+
+  // ---- SKILLS ----
+  skills: {
+    power_strike: {
+      name: 'Power Strike',
+      mpCost: 8,
+      icon: '💥',
+      desc: 'Deal 150% physical damage.',
+      type: 'physical',
+      multiplier: 1.5,
+      target: 'enemy',
+    },
+    shield_bash: {
+      name: 'Shield Bash',
+      mpCost: 10,
+      icon: '🛡',
+      desc: 'Deal damage and stun enemy for 1 turn.',
+      type: 'physical',
+      multiplier: 0.8,
+      effect: 'stun',
+      effectTurns: 1,
+      target: 'enemy',
+    },
+    backstab: {
+      name: 'Backstab',
+      mpCost: 12,
+      icon: '🗡',
+      desc: 'Deal 200% damage, always crits.',
+      type: 'physical',
+      multiplier: 2.0,
+      forceCrit: true,
+      target: 'enemy',
+    },
+    smoke_bomb: {
+      name: 'Smoke Bomb',
+      mpCost: 15,
+      icon: '💨',
+      desc: 'Greatly increase flee chance for 2 turns.',
+      type: 'utility',
+      effect: 'smokescreen',
+      effectTurns: 2,
+      target: 'self',
+    },
+    fireball: {
+      name: 'Fireball',
+      mpCost: 18,
+      icon: '🔥',
+      desc: 'Deal 200% magic damage. Burns for 3 turns.',
+      type: 'magic',
+      multiplier: 2.0,
+      effect: 'burn',
+      effectTurns: 3,
+      target: 'enemy',
+    },
+    ice_lance: {
+      name: 'Ice Lance',
+      mpCost: 14,
+      icon: '❄️',
+      desc: 'Deal 160% magic damage. Slows enemy.',
+      type: 'magic',
+      multiplier: 1.6,
+      effect: 'slow',
+      effectTurns: 2,
+      target: 'enemy',
+    },
+  },
+
+  // ---- ITEMS ----
+  items: {
+    // Consumables
+    health_potion: {
+      id: 'health_potion', name: 'Health Potion', icon: '🧪',
+      type: 'consumable', rarity: 'common',
+      desc: 'Restores 40 HP.', effect: { heal: 40 },
+      value: 20,
+    },
+    greater_health_potion: {
+      id: 'greater_health_potion', name: 'Greater Health Potion', icon: '🧪',
+      type: 'consumable', rarity: 'uncommon',
+      desc: 'Restores 100 HP.', effect: { heal: 100 },
+      value: 60,
+    },
+    mana_potion: {
+      id: 'mana_potion', name: 'Mana Potion', icon: '💙',
+      type: 'consumable', rarity: 'common',
+      desc: 'Restores 30 MP.', effect: { mana: 30 },
+      value: 20,
+    },
+    elixir: {
+      id: 'elixir', name: 'Elixir', icon: '✨',
+      type: 'consumable', rarity: 'rare',
+      desc: 'Restores 80 HP and 40 MP.', effect: { heal: 80, mana: 40 },
+      value: 120,
+    },
+
+    // Weapons
+    rusty_sword: {
+      id: 'rusty_sword', name: 'Rusty Sword', icon: '🗡️',
+      type: 'weapon', rarity: 'common',
+      desc: 'A worn but serviceable blade.', slot: 'weapon',
+      stats: { atk: 4 }, value: 40,
+    },
+    iron_sword: {
+      id: 'iron_sword', name: 'Iron Sword', icon: '🗡️',
+      type: 'weapon', rarity: 'common',
+      desc: 'Solid iron sword.', slot: 'weapon',
+      stats: { atk: 8 }, value: 120,
+    },
+    steel_sword: {
+      id: 'steel_sword', name: 'Steel Sword', icon: '⚔️',
+      type: 'weapon', rarity: 'uncommon',
+      desc: 'Sharp and well-balanced.', slot: 'weapon',
+      stats: { atk: 14, str: 2 }, value: 300,
+    },
+    assassin_dagger: {
+      id: 'assassin_dagger', name: "Assassin's Dagger", icon: '🗡️',
+      type: 'weapon', rarity: 'uncommon',
+      desc: '+15% crit chance.', slot: 'weapon',
+      stats: { atk: 10, crit: 15 }, value: 280,
+    },
+    magic_staff: {
+      id: 'magic_staff', name: 'Magic Staff', icon: '🪄',
+      type: 'weapon', rarity: 'uncommon',
+      desc: 'Amplifies magic damage.', slot: 'weapon',
+      stats: { atk: 6, int: 5, matk: 12 }, value: 320,
+    },
+    flame_blade: {
+      id: 'flame_blade', name: 'Flame Blade', icon: '🔥',
+      type: 'weapon', rarity: 'rare',
+      desc: 'Attacks may burn the target.', slot: 'weapon',
+      stats: { atk: 18, str: 3 }, effect: { burn: 0.2 }, value: 700,
+    },
+    arcane_tome: {
+      id: 'arcane_tome', name: 'Arcane Tome', icon: '📕',
+      type: 'weapon', rarity: 'rare',
+      desc: 'Ancient spellbook. High magic power.', slot: 'weapon',
+      stats: { atk: 4, int: 10, matk: 20 }, value: 750,
+    },
+
+    // Armor
+    leather_armor: {
+      id: 'leather_armor', name: 'Leather Armor', icon: '🥋',
+      type: 'armor', rarity: 'common',
+      desc: 'Basic protection.', slot: 'armor',
+      stats: { def: 4 }, value: 50,
+    },
+    chainmail: {
+      id: 'chainmail', name: 'Chainmail', icon: '🛡',
+      type: 'armor', rarity: 'common',
+      desc: 'Metal rings woven together.', slot: 'armor',
+      stats: { def: 9 }, value: 180,
+    },
+    plate_armor: {
+      id: 'plate_armor', name: 'Plate Armor', icon: '⚙️',
+      type: 'armor', rarity: 'uncommon',
+      desc: 'Heavy but highly protective.', slot: 'armor',
+      stats: { def: 16, str: 1 }, value: 400,
+    },
+    mage_robe: {
+      id: 'mage_robe', name: "Mage's Robe", icon: '👘',
+      type: 'armor', rarity: 'uncommon',
+      desc: 'Enhances magical ability.', slot: 'armor',
+      stats: { def: 5, int: 4, mp: 30 }, value: 350,
+    },
+    dragon_scale: {
+      id: 'dragon_scale', name: 'Dragon Scale Armor', icon: '🐉',
+      type: 'armor', rarity: 'epic',
+      desc: 'Forged from dragon scales.', slot: 'armor',
+      stats: { def: 28, str: 4, hp: 40 }, value: 2000,
+    },
+
+    // Accessories
+    ring_strength: {
+      id: 'ring_strength', name: 'Ring of Strength', icon: '💍',
+      type: 'accessory', rarity: 'uncommon',
+      desc: '+4 Strength.', slot: 'accessory',
+      stats: { str: 4 }, value: 200,
+    },
+    amulet_vitality: {
+      id: 'amulet_vitality', name: 'Amulet of Vitality', icon: '📿',
+      type: 'accessory', rarity: 'uncommon',
+      desc: '+30 max HP.', slot: 'accessory',
+      stats: { hp: 30 }, value: 250,
+    },
+    lucky_charm: {
+      id: 'lucky_charm', name: 'Lucky Charm', icon: '🍀',
+      type: 'accessory', rarity: 'rare',
+      desc: '+10% crit, +5% dodge.', slot: 'accessory',
+      stats: { crit: 10, dodge: 5 }, value: 600,
+    },
+  },
+
+  // ---- ENEMIES ----
+  enemies: {
+    // Area 0 - Village Outskirts
+    rat: {
+      id: 'rat', name: 'Giant Rat', sprite: '🐀',
+      hp: 18, atk: 4, def: 1, exp: 12, gold: [1,4],
+      loot: [{ id: 'health_potion', chance: 0.15 }],
+    },
+    goblin: {
+      id: 'goblin', name: 'Goblin', sprite: '👺',
+      hp: 28, atk: 7, def: 2, exp: 20, gold: [2,8],
+      loot: [
+        { id: 'health_potion', chance: 0.2 },
+        { id: 'rusty_sword', chance: 0.08 },
+      ],
+    },
+    wolf: {
+      id: 'wolf', name: 'Forest Wolf', sprite: '🐺',
+      hp: 35, atk: 9, def: 3, exp: 28, gold: [3,10],
+      loot: [{ id: 'health_potion', chance: 0.15 }],
+    },
+
+    // Area 1 - Dark Forest
+    goblin_shaman: {
+      id: 'goblin_shaman', name: 'Goblin Shaman', sprite: '🧙',
+      hp: 45, atk: 12, def: 4, exp: 45, gold: [6,16],
+      loot: [
+        { id: 'mana_potion', chance: 0.3 },
+        { id: 'leather_armor', chance: 0.1 },
+      ],
+    },
+    orc: {
+      id: 'orc', name: 'Orc Warrior', sprite: '👹',
+      hp: 65, atk: 15, def: 7, exp: 55, gold: [8,20],
+      loot: [
+        { id: 'health_potion', chance: 0.2 },
+        { id: 'iron_sword', chance: 0.08 },
+        { id: 'chainmail', chance: 0.06 },
+      ],
+    },
+    bandit: {
+      id: 'bandit', name: 'Bandit', sprite: '🦹',
+      hp: 52, atk: 14, def: 5, exp: 48, gold: [10,25],
+      loot: [
+        { id: 'health_potion', chance: 0.25 },
+        { id: 'rusty_sword', chance: 0.15 },
+      ],
+    },
+
+    // Area 2 - Ruins
+    skeleton: {
+      id: 'skeleton', name: 'Skeleton', sprite: '💀',
+      hp: 80, atk: 18, def: 8, exp: 70, gold: [10,28],
+      loot: [
+        { id: 'health_potion', chance: 0.2 },
+        { id: 'iron_sword', chance: 0.1 },
+      ],
+    },
+    ghost: {
+      id: 'ghost', name: 'Wraith', sprite: '👻',
+      hp: 70, atk: 22, def: 5, exp: 80, gold: [12,30],
+      loot: [
+        { id: 'mana_potion', chance: 0.3 },
+        { id: 'mage_robe', chance: 0.07 },
+      ],
+    },
+    golem: {
+      id: 'golem', name: 'Stone Golem', sprite: '🪨',
+      hp: 120, atk: 16, def: 18, exp: 95, gold: [15,35],
+      loot: [
+        { id: 'greater_health_potion', chance: 0.2 },
+        { id: 'ring_strength', chance: 0.06 },
+      ],
+    },
+
+    // Area 3 - Dragon's Lair
+    wyvern: {
+      id: 'wyvern', name: 'Wyvern', sprite: '🦎',
+      hp: 160, atk: 28, def: 15, exp: 150, gold: [25,60],
+      loot: [
+        { id: 'greater_health_potion', chance: 0.3 },
+        { id: 'flame_blade', chance: 0.05 },
+      ],
+    },
+    demon: {
+      id: 'demon', name: 'Demon Knight', sprite: '😈',
+      hp: 180, atk: 32, def: 18, exp: 180, gold: [30,70],
+      loot: [
+        { id: 'elixir', chance: 0.2 },
+        { id: 'plate_armor', chance: 0.08 },
+        { id: 'dragon_scale', chance: 0.03 },
+      ],
+    },
+
+    // BOSSES
+    goblin_king: {
+      id: 'goblin_king', name: 'Goblin King', sprite: '👑',
+      hp: 150, atk: 20, def: 10, exp: 200, gold: [30,60],
+      isBoss: true,
+      loot: [
+        { id: 'steel_sword', chance: 0.5 },
+        { id: 'chainmail', chance: 0.5 },
+        { id: 'elixir', chance: 0.4 },
+      ],
+    },
+    lich: {
+      id: 'lich', name: 'The Lich', sprite: '🧟',
+      hp: 300, atk: 35, def: 20, exp: 500, gold: [80,150],
+      isBoss: true,
+      loot: [
+        { id: 'arcane_tome', chance: 0.6 },
+        { id: 'amulet_vitality', chance: 0.5 },
+        { id: 'dragon_scale', chance: 0.2 },
+      ],
+    },
+    ancient_dragon: {
+      id: 'ancient_dragon', name: 'Ancient Dragon', sprite: '🐉',
+      hp: 600, atk: 50, def: 30, exp: 1200, gold: [200,400],
+      isBoss: true,
+      loot: [
+        { id: 'dragon_scale', chance: 0.8 },
+        { id: 'flame_blade', chance: 0.6 },
+        { id: 'lucky_charm', chance: 0.4 },
+      ],
+    },
+  },
+
+  // ---- AREAS ----
+  areas: [
+    {
+      id: 'village_outskirts',
+      name: 'Village Outskirts',
+      icon: '🌿',
+      desc: 'Rolling hills and farmland near the village.',
+      levelReq: 1,
+      enemies: ['rat', 'goblin', 'wolf'],
+      bossEnemy: 'goblin_king',
+      bossAt: 10, // boss appears after N encounters
+      shopItems: ['health_potion', 'mana_potion', 'rusty_sword', 'leather_armor', 'health_potion', 'health_potion'],
+    },
+    {
+      id: 'dark_forest',
+      name: 'Dark Forest',
+      icon: '🌲',
+      desc: 'A gloomy forest teeming with dangerous creatures.',
+      levelReq: 5,
+      enemies: ['goblin_shaman', 'orc', 'bandit'],
+      bossEnemy: 'goblin_king',
+      bossAt: 8,
+      shopItems: ['health_potion', 'greater_health_potion', 'mana_potion', 'iron_sword', 'chainmail', 'assassin_dagger'],
+    },
+    {
+      id: 'ancient_ruins',
+      name: 'Ancient Ruins',
+      icon: '🏛️',
+      desc: 'Crumbling ruins haunted by the undead.',
+      levelReq: 10,
+      enemies: ['skeleton', 'ghost', 'golem'],
+      bossEnemy: 'lich',
+      bossAt: 8,
+      shopItems: ['greater_health_potion', 'elixir', 'mana_potion', 'steel_sword', 'plate_armor', 'mage_robe', 'magic_staff', 'ring_strength', 'amulet_vitality'],
+    },
+    {
+      id: 'dragons_lair',
+      name: "Dragon's Lair",
+      icon: '🔥',
+      desc: "The dragon's volcanic stronghold.",
+      levelReq: 18,
+      enemies: ['wyvern', 'demon'],
+      bossEnemy: 'ancient_dragon',
+      bossAt: 6,
+      shopItems: ['elixir', 'greater_health_potion', 'flame_blade', 'arcane_tome', 'dragon_scale', 'lucky_charm'],
+    },
+  ],
+
+  // ---- LEVEL UP TABLE ----
+  // exp needed to reach level N
+  expTable: [0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200, 4000,
+             5000, 6200, 7600, 9200, 11000, 13200, 15700, 18500, 21600, 25000],
+
+  // ---- REST OPTIONS ----
+  restCost: 20, // gold cost to rest and restore HP/MP
+};
+
+// ============================================================
+// PLAYER.JS — Player character, stats, leveling, inventory
+// ============================================================
+
+class Player {
+  constructor(name, className) {
+    const cls = DATA.classes[className];
+    const base = cls.baseStats;
+
+    this.name      = name;
+    this.className = className;
+    this.classData = cls;
+
+    // Base stats (from class + permanent upgrades)
+    this.baseHp    = base.hp;
+    this.baseMp    = base.mp;
+    this.baseStr   = base.str;
+    this.baseDex   = base.dex;
+    this.baseInt   = base.int;
+    this.baseDef   = base.def;
+
+    // Level / progression
+    this.level  = 1;
+    this.exp    = 0;
+
+    // Resources
+    this.hp     = this.maxHp;
+    this.mp     = this.maxMp;
+    this.gold   = 50;
+
+    // Inventory & equipment
+    this.inventory = [];
+    this.equipped  = { weapon: null, armor: null, accessory: null };
+
+    // Skills
+    this.skills = [...cls.skills];
+
+    // Status effects
+    this.effects = [];
+
+    // Counters
+    this.kills        = 0;
+    this.bossKills    = 0;
+    this.totalDamage  = 0;
+  }
+
+  // ---- COMPUTED STATS ----
+
+  get maxHp() {
+    let v = this.baseHp + (this.level - 1) * 8;
+    v += this._equipBonus('hp');
+    return v;
+  }
+  get maxMp() {
+    let v = this.baseMp + (this.level - 1) * 4;
+    v += this._equipBonus('mp');
+    return v;
+  }
+  get str() { return this.baseStr + this._equipBonus('str'); }
+  get dex() { return this.baseDex + this._equipBonus('dex'); }
+  get int() { return this.baseInt + this._equipBonus('int'); }
+
+  get def() {
+    let v = this.baseDef + this._equipBonus('def');
+    if (this.hasEffect('slow')) v = Math.floor(v * 0.8);
+    return v;
+  }
+
+  get atk() {
+    const weaponAtk = this._equipBonus('atk');
+    const baseAtk = Math.floor(this.str * 1.2) + weaponAtk;
+    return baseAtk;
+  }
+
+  get matk() {
+    return Math.floor(this.int * 1.5) + this._equipBonus('matk');
+  }
+
+  get critChance() {
+    // base 5% + dex scaling + equipment
+    return 5 + Math.floor(this.dex * 0.5) + this._equipBonus('crit');
+  }
+
+  get dodgeChance() {
+    // base 3% + dex scaling + equipment
+    let v = 3 + Math.floor(this.dex * 0.4) + this._equipBonus('dodge');
+    if (this.hasEffect('smokescreen')) v += 40;
+    return Math.min(v, 60);
+  }
+
+  _equipBonus(stat) {
+    let total = 0;
+    for (const slot of Object.values(this.equipped)) {
+      if (slot && slot.stats && slot.stats[stat]) {
+        total += slot.stats[stat];
+      }
+    }
+    return total;
+  }
+
+  // ---- LEVELING ----
+
+  get expToNext() {
+    const table = DATA.expTable;
+    return this.level < table.length ? table[this.level] : Infinity;
+  }
+
+  get expProgress() {
+    const prev = DATA.expTable[this.level - 1] || 0;
+    const next = this.expToNext;
+    return (this.exp - prev) / (next - prev);
+  }
+
+  gainExp(amount) {
+    this.exp += amount;
+    const results = [];
+    while (this.exp >= this.expToNext && this.level < DATA.expTable.length - 1) {
+      this.level++;
+      // Restore HP/MP on level up
+      this.hp = Math.min(this.hp + Math.floor(this.maxHp * 0.3), this.maxHp);
+      this.mp = Math.min(this.mp + Math.floor(this.maxMp * 0.3), this.maxMp);
+      results.push(this._levelUpGains());
+    }
+    return results; // array of gain objects for each level gained
+  }
+
+  _levelUpGains() {
+    // Per-level stat gains by class
+    const gains = {
+      warrior: { hp: 10, mp: 2, str: 2, dex: 1, int: 0, def: 2 },
+      rogue:   { hp: 6,  mp: 3, str: 1, dex: 3, int: 1, def: 1 },
+      mage:    { hp: 4,  mp: 6, str: 0, dex: 1, int: 3, def: 0 },
+    };
+    const g = gains[this.className];
+    this.baseHp  += g.hp;
+    this.baseMp  += g.mp;
+    this.baseStr += g.str;
+    this.baseDex += g.dex;
+    this.baseInt += g.int;
+    this.baseDef += g.def;
+    return { level: this.level, gains: g };
+  }
+
+  // ---- INVENTORY ----
+
+  addItem(itemId) {
+    const item = DATA.items[itemId];
+    if (!item) return false;
+    // Stack consumables
+    const existing = this.inventory.find(i => i.id === itemId && i.type === 'consumable');
+    if (existing) {
+      existing.qty = (existing.qty || 1) + 1;
+    } else {
+      this.inventory.push({ ...item, qty: item.type === 'consumable' ? 1 : undefined });
+    }
+    return true;
+  }
+
+  removeItem(invIndex) {
+    const item = this.inventory[invIndex];
+    if (!item) return null;
+    if (item.type === 'consumable' && item.qty > 1) {
+      item.qty--;
+      return { ...item };
+    }
+    return this.inventory.splice(invIndex, 1)[0];
+  }
+
+  dropItem(invIndex) {
+    // Unequip first if needed
+    const item = this.inventory[invIndex];
+    if (item && item.slot) {
+      if (this.equipped[item.slot] === item) this.equipped[item.slot] = null;
+    }
+    return this.inventory.splice(invIndex, 1)[0];
+  }
+
+  equipItem(invIndex) {
+    const item = this.inventory[invIndex];
+    if (!item || !item.slot) return null;
+    // Unequip current in that slot
+    if (this.equipped[item.slot]) {
+      this.unequipSlot(item.slot);
+    }
+    this.equipped[item.slot] = item;
+    // Remove from inventory list (it's "equipped" now, shown separately)
+    this.inventory.splice(invIndex, 1);
+    // Clamp HP/MP
+    this.hp = Math.min(this.hp, this.maxHp);
+    this.mp = Math.min(this.mp, this.maxMp);
+    return item;
+  }
+
+  unequipSlot(slot) {
+    const item = this.equipped[slot];
+    if (!item) return null;
+    this.equipped[slot] = null;
+    this.inventory.push(item);
+    this.hp = Math.min(this.hp, this.maxHp);
+    this.mp = Math.min(this.mp, this.maxMp);
+    return item;
+  }
+
+  useConsumable(invIndex) {
+    const item = this.inventory[invIndex];
+    if (!item || item.type !== 'consumable') return null;
+    const results = [];
+    if (item.effect.heal) {
+      const healed = Math.min(item.effect.heal, this.maxHp - this.hp);
+      this.hp += healed;
+      results.push(`Restored ${healed} HP.`);
+    }
+    if (item.effect.mana) {
+      const restored = Math.min(item.effect.mana, this.maxMp - this.mp);
+      this.mp += restored;
+      results.push(`Restored ${restored} MP.`);
+    }
+    this.removeItem(invIndex);
+    return results;
+  }
+
+  // ---- STATUS EFFECTS ----
+
+  addEffect(name, turns) {
+    const existing = this.effects.find(e => e.name === name);
+    if (existing) {
+      existing.turns = Math.max(existing.turns, turns);
+    } else {
+      this.effects.push({ name, turns });
+    }
+  }
+
+  hasEffect(name) {
+    return this.effects.some(e => e.name === name);
+  }
+
+  tickEffects() {
+    const msgs = [];
+    for (const ef of this.effects) {
+      ef.turns--;
+      if (ef.name === 'burn') {
+        const dmg = Math.max(1, Math.floor(this.maxHp * 0.04));
+        this.hp = Math.max(0, this.hp - dmg);
+        msgs.push({ text: `You are burning! -${dmg} HP`, type: 'bad' });
+      }
+      if (ef.name === 'regen') {
+        const heal = Math.max(1, Math.floor(this.maxHp * 0.05));
+        this.hp = Math.min(this.maxHp, this.hp + heal);
+        msgs.push({ text: `HP regenerated: +${heal}`, type: 'good' });
+      }
+    }
+    this.effects = this.effects.filter(e => e.turns > 0);
+    return msgs;
+  }
+
+  clearEffects() { this.effects = []; }
+
+  // ---- REST ----
+
+  rest() {
+    if (this.gold < DATA.restCost) return false;
+    this.gold -= DATA.restCost;
+    this.hp = this.maxHp;
+    this.mp = this.maxMp;
+    this.clearEffects();
+    return true;
+  }
+
+  // ---- SERIALIZATION ----
+
+  save() {
+    return JSON.stringify({
+      name: this.name, className: this.className,
+      baseHp: this.baseHp, baseMp: this.baseMp,
+      baseStr: this.baseStr, baseDex: this.baseDex,
+      baseInt: this.baseInt, baseDef: this.baseDef,
+      level: this.level, exp: this.exp, hp: this.hp, mp: this.mp,
+      gold: this.gold, inventory: this.inventory,
+      equippedIds: {
+        weapon:    this.equipped.weapon?.id    || null,
+        armor:     this.equipped.armor?.id     || null,
+        accessory: this.equipped.accessory?.id || null,
+      },
+      skills: this.skills, effects: this.effects,
+      kills: this.kills, bossKills: this.bossKills,
+    });
+  }
+
+  static load(json) {
+    const d = JSON.parse(json);
+    const p = new Player(d.name, d.className);
+    Object.assign(p, {
+      baseHp: d.baseHp, baseMp: d.baseMp,
+      baseStr: d.baseStr, baseDex: d.baseDex,
+      baseInt: d.baseInt, baseDef: d.baseDef,
+      level: d.level, exp: d.exp, hp: d.hp, mp: d.mp,
+      gold: d.gold, inventory: d.inventory,
+      skills: d.skills, effects: d.effects || [],
+      kills: d.kills || 0, bossKills: d.bossKills || 0,
+    });
+    // Re-link equipped items by id
+    for (const [slot, id] of Object.entries(d.equippedIds)) {
+      p.equipped[slot] = id ? DATA.items[id] : null;
+    }
+    return p;
+  }
+}
+
+// ============================================================
+// COMBAT.JS — Turn-based combat engine
+// ============================================================
+
+class CombatEngine {
+  constructor(player, enemyId, onEnd) {
+    this.player   = player;
+    this.enemyDef = { ...DATA.enemies[enemyId] };
+    this.enemy    = {
+      id:       this.enemyDef.id,
+      name:     this.enemyDef.name,
+      sprite:   this.enemyDef.sprite,
+      isBoss:   this.enemyDef.isBoss || false,
+      maxHp:    this.enemyDef.hp,
+      hp:       this.enemyDef.hp,
+      atk:      this.enemyDef.atk,
+      def:      this.enemyDef.def,
+      effects:  [],
+    };
+    this.onEnd     = onEnd;   // callback(result) where result = { won, fled, loot, exp, gold }
+    this.log       = [];
+    this.turn      = 1;
+    this.playerTurn = true;
+    this.ended     = false;
+  }
+
+  // ---- PUBLIC ACTIONS ----
+
+  attack() {
+    if (!this.playerTurn || this.ended) return;
+    this._playerAttack();
+    if (!this.ended) this._enemyTurn();
+  }
+
+  useSkill(skillId) {
+    if (!this.playerTurn || this.ended) return;
+    const skill = DATA.skills[skillId];
+    if (!skill) return;
+    if (this.player.mp < skill.mpCost) {
+      this._addLog(`Not enough MP!`, 'bad');
+      return;
+    }
+    this.player.mp -= skill.mpCost;
+    this._applySkill(skill);
+    if (!this.ended) this._enemyTurn();
+  }
+
+  useItem(invIndex) {
+    if (!this.playerTurn || this.ended) return;
+    const item = this.player.inventory[invIndex];
+    if (!item || item.type !== 'consumable') return;
+    const results = this.player.useConsumable(invIndex);
+    if (results) {
+      results.forEach(r => this._addLog(r, 'good'));
+      UI.renderAll();
+      if (!this.ended) this._enemyTurn();
+    }
+  }
+
+  flee() {
+    if (!this.playerTurn || this.ended) return;
+    const chance = this.player.hasEffect('smokescreen') ? 80 : 40 + this.player.dex;
+    if (Math.random() * 100 < chance) {
+      this._addLog('You fled successfully!', 'info');
+      this._end({ won: false, fled: true });
+    } else {
+      this._addLog('Failed to flee!', 'bad');
+      this._enemyTurn();
+    }
+  }
+
+  // ---- INTERNAL ----
+
+  _playerAttack(multiplier = 1, forceCrit = false, isMagic = false) {
+    // Dodge check
+    if (Math.random() * 100 < this.enemy.effects.some(e => e.name === 'blind') ? 30 : 5) {
+      this._addLog(`${this.enemy.name} dodged your attack!`, 'bad');
+      return 0;
+    }
+
+    const base = isMagic ? this.player.matk : this.player.atk;
+    let dmg = Math.max(1, base - Math.floor(this.enemy.def * 0.6));
+    dmg = Math.floor(dmg * multiplier);
+
+    // Crit check
+    const critRoll = forceCrit || Math.random() * 100 < this.player.critChance;
+    if (critRoll) {
+      dmg = Math.floor(dmg * 1.8);
+      this._addLog(`Critical hit! ${dmg} damage!`, 'good');
+    } else {
+      this._addLog(`You deal ${dmg} damage to ${this.enemy.name}.`, 'good');
+    }
+
+    this.enemy.hp = Math.max(0, this.enemy.hp - dmg);
+    this.player.totalDamage += dmg;
+
+    // Weapon proc effects
+    const weapon = this.player.equipped.weapon;
+    if (weapon?.effect?.burn && Math.random() < weapon.effect.burn) {
+      this._addEffect(this.enemy, 'burn', 3);
+      this._addLog(`${this.enemy.name} is set on fire!`, 'good');
+    }
+
+    if (this.enemy.hp <= 0) this._victory();
+    return dmg;
+  }
+
+  _applySkill(skill) {
+    this._addLog(`${this.player.name} uses ${skill.icon} ${skill.name}!`, 'info');
+
+    if (skill.target === 'self') {
+      if (skill.effect) {
+        this.player.addEffect(skill.effect, skill.effectTurns);
+        this._addLog(`${skill.effect} applied for ${skill.effectTurns} turns.`, 'info');
+      }
+      return;
+    }
+
+    // Damage skills
+    if (skill.multiplier) {
+      const dmg = this._playerAttack(skill.multiplier, skill.forceCrit || false, skill.type === 'magic');
+      if (dmg > 0 && skill.effect && this.enemy.hp > 0) {
+        this._addEffect(this.enemy, skill.effect, skill.effectTurns);
+        this._addLog(`${this.enemy.name} is ${skill.effect}ed!`, 'info');
+      }
+    }
+  }
+
+  _enemyTurn() {
+    this.turn++;
+    this.playerTurn = false;
+
+    // Tick enemy effects
+    const efMsgs = this._tickEnemyEffects();
+    efMsgs.forEach(m => this._addLog(m.text, m.type));
+    if (this.ended) return;
+
+    // Stunned = skip turn
+    if (this.enemy.effects.some(e => e.name === 'stun')) {
+      this._addLog(`${this.enemy.name} is stunned and skips their turn!`, 'info');
+      this._endEnemyTurn();
+      return;
+    }
+
+    // Slowed = -30% atk
+    let atkMod = 1.0;
+    if (this.enemy.effects.some(e => e.name === 'slow')) atkMod = 0.7;
+
+    // Enemy attack
+    if (Math.random() * 100 < this.player.dodgeChance) {
+      this._addLog(`You dodge ${this.enemy.name}'s attack!`, 'good');
+    } else {
+      let rawDmg = Math.max(1, Math.floor(this.enemy.atk * atkMod) - Math.floor(this.player.def * 0.5));
+      // Boss attacks hit harder occasionally
+      if (this.enemy.isBoss && Math.random() < 0.25) {
+        rawDmg = Math.floor(rawDmg * 1.5);
+        this._addLog(`${this.enemy.name} uses a powerful attack! ${rawDmg} damage!`, 'bad');
+      } else {
+        this._addLog(`${this.enemy.name} attacks for ${rawDmg} damage.`, 'bad');
+      }
+      this.player.hp = Math.max(0, this.player.hp - rawDmg);
+    }
+
+    // Tick player effects
+    const pEfMsgs = this.player.tickEffects();
+    pEfMsgs.forEach(m => this._addLog(m.text, m.type));
+
+    if (this.player.hp <= 0) {
+      this._addLog(`You have been defeated!`, 'bad');
+      this._end({ won: false, fled: false });
+      return;
+    }
+
+    // MP regen
+    const regen = this.player.classData.mpRegen;
+    this.player.mp = Math.min(this.player.maxMp, this.player.mp + regen);
+
+    this._endEnemyTurn();
+  }
+
+  _endEnemyTurn() {
+    this.playerTurn = true;
+    UI.renderAll();
+    UI.renderCombat(this);
+  }
+
+  _addEffect(target, name, turns) {
+    const existing = target.effects.find(e => e.name === name);
+    if (existing) existing.turns = Math.max(existing.turns, turns);
+    else target.effects.push({ name, turns });
+  }
+
+  _tickEnemyEffects() {
+    const msgs = [];
+    for (const ef of this.enemy.effects) {
+      ef.turns--;
+      if (ef.name === 'burn') {
+        const dmg = Math.max(1, Math.floor(this.enemy.maxHp * 0.05));
+        this.enemy.hp = Math.max(0, this.enemy.hp - dmg);
+        msgs.push({ text: `${this.enemy.name} burns for ${dmg} damage!`, type: 'good' });
+        if (this.enemy.hp <= 0) { this._victory(); }
+      }
+    }
+    this.enemy.effects = this.enemy.effects.filter(e => e.turns > 0);
+    return msgs;
+  }
+
+  _victory() {
+    if (this.ended) return;
+    const goldEarned = this._rollGold();
+    const loot       = this._rollLoot();
+    const expEarned  = this.enemyDef.exp;
+
+    this._addLog(`${this.enemy.name} is defeated!`, 'good');
+    this._addLog(`+${expEarned} EXP  +${goldEarned} Gold`, 'gold');
+
+    this.player.kills++;
+    if (this.enemy.isBoss) this.player.bossKills++;
+
+    this._end({ won: true, fled: false, exp: expEarned, gold: goldEarned, loot });
+  }
+
+  _rollGold() {
+    const [min, max] = this.enemyDef.gold;
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  _rollLoot() {
+    const drops = [];
+    for (const entry of (this.enemyDef.loot || [])) {
+      if (Math.random() < entry.chance) {
+        drops.push(entry.id);
+      }
+    }
+    return drops;
+  }
+
+  _end(result) {
+    this.ended = true;
+    this.onEnd(result);
+  }
+
+  _addLog(text, type = '') {
+    this.log.push({ text, type });
+    const el = document.getElementById('combat-log');
+    if (el) {
+      const line = document.createElement('div');
+      line.className = `log-line ${type}`;
+      line.textContent = text;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+    }
+  }
+}
+
+// ============================================================
+// UI.JS — All DOM rendering
+// ============================================================
+
+const UI = {
+
+  // ---- SCREENS ----
+
+  showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  },
+
+  showView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  },
+
+  // ---- FULL RENDER ----
+
+  renderAll() {
+    if (!window.game || !game.player) return;
+    this.renderPlayerStats(game.player);
+    this.renderInventory(game.player);
+    this.renderSkills(game.player);
+  },
+
+  // ---- PLAYER STATS ----
+
+  renderPlayerStats(p) {
+    document.getElementById('ui-player-name').textContent = p.name;
+    document.getElementById('ui-player-class').textContent = p.classData.icon + ' ' + p.classData.name;
+    document.getElementById('ui-level').textContent = p.level;
+
+    // EXP bar
+    const expPct = Math.min(100, Math.round(p.expProgress * 100));
+    document.getElementById('bar-exp').style.width = expPct + '%';
+    const prevExp = DATA.expTable[p.level - 1] || 0;
+    document.getElementById('ui-exp-text').textContent =
+      `${p.exp - prevExp}/${p.expToNext - prevExp}`;
+
+    // HP bar
+    const hpPct = Math.min(100, Math.round((p.hp / p.maxHp) * 100));
+    document.getElementById('bar-hp').style.width = hpPct + '%';
+    document.getElementById('ui-hp-text').textContent = `${p.hp}/${p.maxHp}`;
+
+    // MP bar
+    const mpPct = Math.min(100, Math.round((p.mp / p.maxMp) * 100));
+    document.getElementById('bar-mp').style.width = mpPct + '%';
+    document.getElementById('ui-mp-text').textContent = `${p.mp}/${p.maxMp}`;
+
+    document.getElementById('ui-atk').textContent  = p.atk;
+    document.getElementById('ui-def').textContent  = p.def;
+    document.getElementById('ui-gold').textContent = p.gold;
+  },
+
+  // ---- SKILLS ----
+
+  renderSkills(p) {
+    const list = document.getElementById('skill-list');
+    list.innerHTML = '';
+    for (const sid of p.skills) {
+      const sk = DATA.skills[sid];
+      if (!sk) continue;
+      const el = document.createElement('div');
+      el.className = 'skill-entry';
+      el.innerHTML = `
+        <span class="skill-name">${sk.icon} ${sk.name}</span>
+        <span class="skill-cost">${sk.mpCost} MP</span>
+        <div class="skill-desc">${sk.desc}</div>`;
+      list.appendChild(el);
+    }
+  },
+
+  // ---- INVENTORY ----
+
+  renderInventory(p) {
+    // Inventory list
+    const invEl = document.getElementById('inventory-list');
+    invEl.innerHTML = '';
+    if (p.inventory.length === 0) {
+      invEl.innerHTML = '<div style="color:var(--dim);font-size:0.72rem;">Empty</div>';
+    }
+    p.inventory.forEach((item, idx) => {
+      const el = this._buildInvItemEl(item, idx, p, false);
+      invEl.appendChild(el);
+    });
+
+    // Equipped slots
+    const eqEl = document.getElementById('equipped-list');
+    eqEl.innerHTML = '';
+    const slots = { weapon: '⚔ Weapon', armor: '🛡 Armor', accessory: '💍 Accessory' };
+    for (const [slot, label] of Object.entries(slots)) {
+      const item = p.equipped[slot];
+      if (item) {
+        const el = this._buildInvItemEl(item, slot, p, true);
+        eqEl.appendChild(el);
+      } else {
+        const el = document.createElement('div');
+        el.className = 'inv-item';
+        el.style.color = 'var(--dim)';
+        el.textContent = label + ': —';
+        eqEl.appendChild(el);
+      }
+    }
+  },
+
+  _buildInvItemEl(item, idxOrSlot, p, isEquipped) {
+    const el = document.createElement('div');
+    el.className = `inv-item ${isEquipped ? 'equipped' : ''}`;
+    const qty = item.qty && item.qty > 1 ? ` ×${item.qty}` : '';
+    const rarityClass = 'rarity-' + (item.rarity || 'common');
+    let statsStr = '';
+    if (item.stats) {
+      statsStr = Object.entries(item.stats).map(([k, v]) => `${k.toUpperCase()}+${v}`).join(' ');
+    }
+    el.innerHTML = `
+      <div class="inv-item-name ${rarityClass}">${item.icon || ''} ${item.name}${qty}</div>
+      <div class="inv-item-type">${item.type}${item.slot ? ' · ' + item.slot : ''}</div>
+      ${statsStr ? `<div class="inv-item-stats">${statsStr}</div>` : ''}
+      <div class="item-actions"></div>`;
+
+    const actionsEl = el.querySelector('.item-actions');
+
+    if (isEquipped) {
+      const btn = document.createElement('button');
+      btn.className = 'item-action-btn';
+      btn.textContent = 'Unequip';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        p.unequipSlot(idxOrSlot);
+        this.renderAll();
+      });
+      actionsEl.appendChild(btn);
+    } else {
+      if (item.type === 'consumable') {
+        const btn = document.createElement('button');
+        btn.className = 'item-action-btn use';
+        btn.textContent = 'Use';
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const realIdx = p.inventory.indexOf(item);
+          const msgs = p.useConsumable(realIdx);
+          if (msgs) msgs.forEach(m => game.log(m, 'good'));
+          this.renderAll();
+        });
+        actionsEl.appendChild(btn);
+      }
+      if (item.slot) {
+        const btn = document.createElement('button');
+        btn.className = 'item-action-btn';
+        btn.textContent = 'Equip';
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const realIdx = p.inventory.indexOf(item);
+          p.equipItem(realIdx);
+          this.renderAll();
+        });
+        actionsEl.appendChild(btn);
+      }
+      const drop = document.createElement('button');
+      drop.className = 'item-action-btn drop';
+      drop.textContent = 'Drop';
+      drop.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const realIdx = p.inventory.indexOf(item);
+        p.dropItem(realIdx);
+        this.renderAll();
+        game.log(`Dropped ${item.name}.`, 'dim');
+      });
+      actionsEl.appendChild(drop);
+    }
+    return el;
+  },
+
+  // ---- COMBAT ----
+
+  renderCombat(combat) {
+    const e = combat.enemy;
+    document.getElementById('ui-enemy-name').textContent =
+      (e.isBoss ? '★ BOSS ★ ' : '') + e.name;
+    document.getElementById('ui-enemy-sprite').textContent = e.sprite;
+
+    const hpPct = Math.max(0, Math.round((e.hp / e.maxHp) * 100));
+    document.getElementById('bar-enemy-hp').style.width = hpPct + '%';
+    document.getElementById('ui-enemy-hp').textContent  = `${e.hp}/${e.maxHp}`;
+
+    // Skill buttons
+    const skillsEl = document.getElementById('combat-skills');
+    skillsEl.innerHTML = '';
+    for (const sid of combat.player.skills) {
+      const sk = DATA.skills[sid];
+      if (!sk) continue;
+      const btn = document.createElement('button');
+      btn.className = 'combat-btn skill-btn';
+      btn.textContent = `${sk.icon} ${sk.name} (${sk.mpCost}MP)`;
+      btn.disabled = combat.player.mp < sk.mpCost || !combat.playerTurn;
+      btn.addEventListener('click', () => combat.useSkill(sid));
+      skillsEl.appendChild(btn);
+    }
+
+    // Enable/disable action buttons
+    const busy = !combat.playerTurn;
+    document.getElementById('btn-attack').disabled = busy;
+    document.getElementById('btn-item').disabled   = busy;
+    document.getElementById('btn-flee').disabled   = busy;
+  },
+
+  // ---- SHOP ----
+
+  renderShop(area, player) {
+    const el = document.getElementById('shop-inventory');
+    el.innerHTML = '';
+    for (const itemId of area.shopItems) {
+      const item = DATA.items[itemId];
+      if (!item) continue;
+      const row = document.createElement('div');
+      row.className = 'shop-item';
+      let statsStr = '';
+      if (item.stats) {
+        statsStr = Object.entries(item.stats).map(([k,v]) => `${k}+${v}`).join(' ');
+      }
+      row.innerHTML = `
+        <div class="shop-item-info">
+          <div class="shop-item-name rarity-${item.rarity}">${item.icon || ''} ${item.name}</div>
+          <div class="shop-item-desc">${item.desc}${statsStr ? ' · ' + statsStr : ''}</div>
+        </div>
+        <span class="shop-item-price">💰 ${item.value}</span>`;
+      const btn = document.createElement('button');
+      btn.className = 'shop-item-buy';
+      btn.textContent = 'Buy';
+      btn.disabled = player.gold < item.value;
+      btn.addEventListener('click', () => {
+        if (player.gold < item.value) return;
+        player.gold -= item.value;
+        player.addItem(item.id);
+        game.log(`Bought ${item.name} for ${item.value} gold.`, 'gold');
+        this.renderAll();
+        this.renderShop(area, player); // refresh
+      });
+      row.appendChild(btn);
+      el.appendChild(row);
+    }
+  },
+
+  // ---- TRAVEL ----
+
+  renderTravel(currentAreaIdx, player) {
+    const el = document.getElementById('area-list');
+    el.innerHTML = '';
+    DATA.areas.forEach((area, idx) => {
+      const locked = player.level < area.levelReq;
+      const isCurrent = idx === currentAreaIdx;
+      const div = document.createElement('div');
+      div.className = `area-option ${locked ? 'locked' : ''}`;
+      div.innerHTML = `
+        <div>
+          <div class="area-name">${area.icon} ${area.name} ${isCurrent ? '(current)' : ''}</div>
+          <div class="area-desc">${area.desc}</div>
+          ${locked ? `<div class="area-req">Requires Level ${area.levelReq}</div>` : ''}
+        </div>
+        <div class="area-level">Lvl ${area.levelReq}+</div>`;
+      if (!locked && !isCurrent) {
+        div.addEventListener('click', () => game.travelTo(idx));
+      }
+      el.appendChild(div);
+    });
+  },
+
+  // ---- LOOT OVERLAY ----
+
+  showLoot(lootIds, onClose) {
+    const overlay = document.getElementById('loot-overlay');
+    const list    = document.getElementById('loot-list');
+    list.innerHTML = '';
+    if (lootIds.length === 0) {
+      list.innerHTML = '<div class="loot-entry"><span class="loot-name">Nothing dropped.</span></div>';
+    } else {
+      for (const id of lootIds) {
+        const item = DATA.items[id];
+        if (!item) continue;
+        const el = document.createElement('div');
+        el.className = 'loot-entry';
+        el.innerHTML = `<span class="loot-name rarity-${item.rarity}">${item.icon || ''} ${item.name}</span>
+          <div class="loot-desc">${item.desc}</div>`;
+        list.appendChild(el);
+      }
+    }
+    overlay.classList.remove('hidden');
+    document.getElementById('btn-loot-ok').onclick = () => {
+      overlay.classList.add('hidden');
+      onClose();
+    };
+  },
+
+  // ---- LEVEL UP OVERLAY ----
+
+  showLevelUp(levelResults, onClose) {
+    const overlay = document.getElementById('levelup-overlay');
+    const msg     = document.getElementById('levelup-msg');
+    const choices = document.getElementById('levelup-stat-choices');
+
+    // Show all gained levels
+    const lines = levelResults.map(r => `Level ${r.level}!`).join('  ');
+    msg.textContent = lines;
+
+    // Stat choice: pick one bonus stat to boost
+    choices.innerHTML = '';
+    const bonusOptions = [
+      { label: '+15 Max HP', apply: p => { p.baseHp += 15; p.hp = Math.min(p.hp + 15, p.maxHp); } },
+      { label: '+8 Max MP',  apply: p => { p.baseMp += 8;  p.mp = Math.min(p.mp + 8, p.maxMp); } },
+      { label: '+3 STR',     apply: p => { p.baseStr += 3; } },
+      { label: '+3 DEX',     apply: p => { p.baseDex += 3; } },
+      { label: '+3 INT',     apply: p => { p.baseInt += 3; } },
+      { label: '+2 DEF',     apply: p => { p.baseDef += 2; } },
+    ];
+    bonusOptions.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'stat-choice-btn';
+      btn.textContent = opt.label;
+      btn.addEventListener('click', () => {
+        opt.apply(game.player);
+        UI.renderAll();
+        overlay.classList.add('hidden');
+        onClose();
+      });
+      choices.appendChild(btn);
+    });
+
+    overlay.classList.remove('hidden');
+    document.getElementById('btn-levelup-ok').onclick = null; // must pick a stat
+  },
+
+  // ---- WORLD MAP ----
+
+  renderWorldMap(areaIdx) {
+    const grid = document.getElementById('world-map-grid');
+    grid.innerHTML = '';
+    // Simple 5×5 grid representation
+    const icons = ['🌿','🌲','🏛️','🔥','🏔️','🌊','🏜️','🌾','🗻','❄️',
+                   '🏕️','🌉','🏚️','⛩️','🌙','🌄','🦌','🍄','🪨','🌺'];
+    for (let i = 0; i < 25; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'map-cell';
+      if (i === 12) {
+        cell.textContent = '🧍'; // player in center
+        cell.classList.add('player');
+      } else {
+        const area = DATA.areas[areaIdx];
+        cell.textContent = icons[(i + areaIdx * 3) % icons.length];
+        cell.classList.add('explored');
+      }
+      grid.appendChild(cell);
+    }
+  },
+
+  // ---- LOCATION BAR ----
+
+  updateLocation(area) {
+    document.getElementById('ui-location').textContent = area.icon + ' ' + area.name;
+    document.getElementById('ui-area-level').textContent = `Recommended Lvl ${area.levelReq}+`;
+  },
+};
+
+// ============================================================
+// GAME.JS — Main game loop, state machine, event wiring
+// ============================================================
+
+const game = {
+  player:       null,
+  combat:       null,
+  areaIndex:    0,
+  encounters:   0,   // encounters in current area (tracks boss threshold)
+  selectedClass: null,
+
+  // ---- INIT ----
+
+  init() {
+    this._bindTitleScreen();
+    this._bindGameButtons();
+    this._bindOverlays();
+    this._tryLoadSave();
+  },
+
+  _tryLoadSave() {
+    const saved = localStorage.getItem('rpg_save');
+    if (saved) {
+      try {
+        this.player = Player.load(saved);
+        this.areaIndex = parseInt(localStorage.getItem('rpg_area') || '0', 10);
+        this.encounters = parseInt(localStorage.getItem('rpg_enc') || '0', 10);
+        this._startGame();
+        this.log('Welcome back, ' + this.player.name + '!', 'info');
+        return;
+      } catch(e) {
+        localStorage.clear();
+      }
+    }
+  },
+
+  _save() {
+    if (!this.player) return;
+    localStorage.setItem('rpg_save', this.player.save());
+    localStorage.setItem('rpg_area', this.areaIndex);
+    localStorage.setItem('rpg_enc', this.encounters);
+  },
+
+  // ---- TITLE SCREEN BINDING ----
+
+  _bindTitleScreen() {
+    // Class card selection
+    document.querySelectorAll('.class-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        game.selectedClass = card.dataset.class;
+        document.getElementById('name-form').style.display = 'block';
+        document.getElementById('player-name-input').focus();
+      });
+    });
+
+    // Start button
+    document.getElementById('btn-start').addEventListener('click', () => {
+      const name = document.getElementById('player-name-input').value.trim();
+      if (!name) {
+        document.getElementById('player-name-input').placeholder = 'Enter a name!';
+        return;
+      }
+      if (!game.selectedClass) return;
+      game.newGame(name, game.selectedClass);
+    });
+
+    // Enter key on name input
+    document.getElementById('player-name-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-start').click();
+    });
+
+    // Restart button
+    document.getElementById('btn-restart').addEventListener('click', () => {
+      localStorage.clear();
+      location.reload();
+    });
+  },
+
+  // ---- GAME BUTTON BINDING ----
+
+  _bindGameButtons() {
+    document.getElementById('btn-explore').addEventListener('click', () => game.explore());
+    document.getElementById('btn-shop').addEventListener('click',    () => game.openShop());
+    document.getElementById('btn-rest').addEventListener('click',    () => game.rest());
+    document.getElementById('btn-travel').addEventListener('click',  () => game.openTravel());
+
+    document.getElementById('btn-shop-close').addEventListener('click', () => {
+      UI.showView('view-world');
+      UI.renderWorldMap(game.areaIndex);
+    });
+    document.getElementById('btn-travel-close').addEventListener('click', () => {
+      UI.showView('view-world');
+    });
+
+    // Combat buttons
+    document.getElementById('btn-attack').addEventListener('click', () => {
+      if (game.combat) game.combat.attack();
+    });
+    document.getElementById('btn-item').addEventListener('click', () => {
+      game._showCombatItemPicker();
+    });
+    document.getElementById('btn-flee').addEventListener('click', () => {
+      if (game.combat) game.combat.flee();
+    });
+  },
+
+  _bindOverlays() {
+    // loot/levelup handled dynamically in UI methods
+  },
+
+  // ---- NEW GAME ----
+
+  newGame(name, className) {
+    this.player     = new Player(name, className);
+    this.areaIndex  = 0;
+    this.encounters = 0;
+    // Starting gear
+    this.player.addItem('health_potion');
+    this.player.addItem('health_potion');
+    if (className === 'warrior') this.player.addItem('rusty_sword');
+    if (className === 'mage')    this.player.addItem('mana_potion');
+    this._startGame();
+    this.log(`Welcome, ${name} the ${DATA.classes[className].name}!`, 'info');
+    this.log('Use Explore to find enemies, Shop to buy gear, Rest to heal.', 'dim');
+    this._save();
+  },
+
+  _startGame() {
+    UI.showScreen('screen-game');
+    UI.showView('view-world');
+    UI.renderAll();
+    const area = DATA.areas[this.areaIndex];
+    UI.updateLocation(area);
+    UI.renderWorldMap(this.areaIndex);
+  },
+
+  // ---- EXPLORE ----
+
+  explore() {
+    const area = DATA.areas[this.areaIndex];
+
+    // Check if boss encounter threshold reached
+    const bossReady = this.encounters > 0 && this.encounters % area.bossAt === 0;
+    const enemyId   = bossReady
+      ? area.bossEnemy
+      : area.enemies[Math.floor(Math.random() * area.enemies.length)];
+
+    const enemy = DATA.enemies[enemyId];
+    this.encounters++;
+    this.log(`You venture into ${area.name}...`, 'dim');
+    this.log(`A ${enemy.name} appears!${enemy.isBoss ? ' ★ BOSS ★' : ''}`, enemy.isBoss ? 'gold' : 'bad');
+    this._save();
+    this._startCombat(enemyId);
+  },
+
+  // ---- COMBAT ----
+
+  _startCombat(enemyId) {
+    UI.showView('view-combat');
+    document.getElementById('combat-log').innerHTML = '';
+
+    this.combat = new CombatEngine(this.player, enemyId, (result) => {
+      this._onCombatEnd(result);
+    });
+    UI.renderAll();
+    UI.renderCombat(this.combat);
+  },
+
+  _onCombatEnd(result) {
+    this.combat = null;
+
+    if (!result.won && !result.fled) {
+      // Player died
+      this._gameOver();
+      return;
+    }
+
+    if (result.fled) {
+      UI.showView('view-world');
+      UI.renderWorldMap(this.areaIndex);
+      UI.renderAll();
+      this._save();
+      return;
+    }
+
+    // Won — apply rewards
+    this.player.gold += result.gold;
+    const levelResults = this.player.gainExp(result.exp);
+    UI.renderAll();
+    this._save();
+
+    // Show loot first, then level up if applicable
+    UI.showLoot(result.loot, () => {
+      // Add loot to inventory
+      for (const id of result.loot) {
+        this.player.addItem(id);
+      }
+      UI.renderAll();
+      this._save();
+
+      if (levelResults.length > 0) {
+        UI.showLevelUp(levelResults, () => {
+          this._postCombat();
+        });
+      } else {
+        this._postCombat();
+      }
+    });
+  },
+
+  _postCombat() {
+    UI.showView('view-world');
+    UI.renderWorldMap(this.areaIndex);
+    UI.renderAll();
+    const area = DATA.areas[this.areaIndex];
+    this.log(`You are in ${area.name}.`, 'dim');
+
+    // Auto-save
+    this._save();
+
+    // Low HP warning
+    const hpPct = this.player.hp / this.player.maxHp;
+    if (hpPct < 0.3) {
+      this.log('⚠ Low HP! Consider resting or using a potion.', 'bad');
+    }
+  },
+
+  _showCombatItemPicker() {
+    const consumables = this.player.inventory
+      .map((item, idx) => ({ item, idx }))
+      .filter(({ item }) => item.type === 'consumable');
+
+    if (consumables.length === 0) {
+      this.combat._addLog('No usable items!', 'bad');
+      return;
+    }
+
+    // Build a small inline picker above the combat buttons
+    const existing = document.getElementById('combat-item-picker');
+    if (existing) { existing.remove(); return; } // toggle off if already open
+
+    const picker = document.createElement('div');
+    picker.id = 'combat-item-picker';
+    picker.style.cssText = `
+      background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+      padding:8px; margin-bottom:8px; display:flex; flex-wrap:wrap; gap:6px;
+      grid-column: 1 / -1;`;
+
+    consumables.forEach(({ item, idx }) => {
+      const btn = document.createElement('button');
+      btn.className = 'combat-btn';
+      btn.style.fontSize = '0.75rem';
+      btn.textContent = `${item.icon || ''} ${item.name}${item.qty > 1 ? ' ×' + item.qty : ''}`;
+      btn.addEventListener('click', () => {
+        picker.remove();
+        this.combat.useItem(idx);
+      });
+      picker.appendChild(btn);
+    });
+
+    const actionsEl = document.getElementById('combat-actions');
+    actionsEl.insertBefore(picker, actionsEl.firstChild);
+  },
+
+  // ---- SHOP ----
+
+  openShop() {
+    const area = DATA.areas[this.areaIndex];
+    UI.showView('view-shop');
+    UI.renderShop(area, this.player);
+    this._save();
+  },
+
+  // ---- REST ----
+
+  rest() {
+    const cost = DATA.restCost;
+    if (this.player.gold < cost) {
+      this.log(`Not enough gold to rest! (${cost} gold needed)`, 'bad');
+      return;
+    }
+    this.player.rest();
+    this.log(`You rest at the inn. Fully restored! (-${cost} gold)`, 'good');
+    UI.renderAll();
+    this._save();
+  },
+
+  // ---- TRAVEL ----
+
+  openTravel() {
+    UI.showView('view-travel');
+    UI.renderTravel(this.areaIndex, this.player);
+  },
+
+  travelTo(areaIdx) {
+    const area = DATA.areas[areaIdx];
+    if (this.player.level < area.levelReq) return;
+    this.areaIndex  = areaIdx;
+    this.encounters = 0;
+    UI.updateLocation(area);
+    UI.showView('view-world');
+    UI.renderWorldMap(areaIdx);
+    this.log(`Traveled to ${area.name}.`, 'info');
+    this._save();
+  },
+
+  // ---- GAME OVER ----
+
+  _gameOver() {
+    const p = this.player;
+    document.getElementById('gameover-msg').textContent =
+      `${p.name} the ${p.classData.name} fell in battle. ` +
+      `Reached Level ${p.level} with ${p.kills} kills.`;
+    UI.showScreen('screen-gameover');
+    localStorage.clear();
+  },
+
+  // ---- LOG ----
+
+  log(msg, type = '') {
+    const el = document.getElementById('event-log');
+    if (!el) return;
+    const line = document.createElement('div');
+    line.className = `log-line ${type}`;
+    line.textContent = msg;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+    // Keep log from getting too long
+    while (el.children.length > 80) el.removeChild(el.firstChild);
+  },
+};
+
+// Boot
+document.addEventListener('DOMContentLoaded', () => game.init());
+
+</script>
+</body>
+</html>
